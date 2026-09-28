@@ -1,0 +1,289 @@
+@import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;1,400;1,500;1,600&family=Outfit:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
+@import 'tailwindcss';
+
+/* Tokens live in :root (not @theme) so Tailwind never prunes them —
+   the app reads them via inline styles, which Tailwind can't see. */
+:root {
+  --font-sans: 'Outfit', ui-sans-serif, system-ui, sans-serif;
+  --font-serif: 'Lora', Georgia, ui-serif, serif;
+  --font-mono: 'DM Mono', ui-monospace, monospace;
+
+  /* Base — neutral, warm paper */
+  --color-bg: #F7F4ED;
+  --color-sidebar: #F1ECE2;
+  --color-surface: #EFE9DC;
+  --color-card: #FFFFFF;
+  --color-card-glass: rgba(255, 255, 255, 0.84);
+  --color-ink: #1A1714;
+  --color-ink-2: #6B6259;
+  --color-ink-3: #A8A09A;
+  --color-border: #E3DCCD;
+  --color-border-light: #EFEAE0;
+
+  /* Brand — pomegranate */
+  --color-brand: #9B2F31;
+  --color-brand-seed: #B8443F;
+  --color-brand-flesh: #F7EEE6;
+
+  /* Single accent (= brand) */
+  --color-accent: #9B2F31;
+  --color-accent-soft: #F6E6E3;
+
+  /* Semantic (used sparingly — text + small dots only) */
+  --color-positive: #4E7256;
+  --color-negative: #B8432B;
+  --color-caution: #A87A1E;
+
+  /* Guide lines */
+  --line: #E6E0D3;
+  --line-strong: #D6CEBE;
+  --grid: rgba(26, 23, 20, 0.07);
+  --shadow-card: 0 1px 2px rgba(26, 23, 20, 0.04);
+  --shadow-hover: 0 4px 16px rgba(26, 23, 20, 0.08);
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  line-height: 1.6;
+}
+
+::-webkit-scrollbar { width: 0; background: transparent; }
+
+::selection {
+  background: var(--color-accent-soft);
+  color: var(--color-ink);
+}
+
+@keyframes fadeSlideIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.view-enter {
+  animation: fadeSlideIn 0.22s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.lift {
+  transition: box-shadow 0.18s ease, border-color 0.18s ease;
+}
+.lift:hover {
+  box-shadow: var(--shadow-hover);
+  border-color: var(--line-strong) !important;
+}
+
+.row-hover {
+  transition: background 0.12s ease;
+}
+.row-hover:hover {
+  background: var(--color-bg);
+}
+
+.cal-cell {
+  transition: background 0.12s ease;
+}
+.cal-cell:hover {
+  background: var(--color-bg) !important;
+}
+
+.nav-btn:hover {
+  background: rgba(26, 23, 20, 0.04);
+}
+
+.link-btn {
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  border-radius: 20px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-ink-2);
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+.link-btn:hover {
+  background: var(--color-ink);
+  border-color: var(--color-ink);
+  color: #fff;
+}
+
+input:focus {
+  outline: none;
+}
+
+button {
+  font-family: var(--font-sans);
+}
+
+/* ─── Background tree ───────────────────────────────────────────────────── */
+.tree-sway {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;  /* sway from the roots */
+  will-change: transform;
+  animation: sway 10s ease-in-out infinite alternate;
+}
+@keyframes sway {
+  from { transform: rotate(-0.6deg); }
+  to   { transform: rotate(0.6deg); }
+}
+
+/* ─── Row actions that appear on hover (keeps lists calm) ───────────────── */
+.reveal-on-hover .reveal { opacity: 0; transition: opacity 0.15s ease; }
+.reveal-on-hover:hover .reveal,
+.reveal-on-hover:focus-within .reveal { opacity: 1; }
+
+.icon-btn {
+  width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--line-strong);
+  background: var(--color-card); color: var(--color-ink-2); cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.icon-btn:hover { background: var(--color-ink); color: #fff; border-color: var(--color-ink); }
+
+.segment { transition: opacity 0.15s ease, filter 0.15s ease; }
+
+.timeline-dot { transition: transform 0.15s ease; transform-box: fill-box; transform-origin: center; cursor: default; }
+.timeline-dot:hover { transform: scale(1.25); }
+
+@media (prefers-reduced-motion: reduce) {
+  .tree-sway, .view-enter { animation: none; }
+  .segment, .timeline-dot, .lift { transition: none; }
+}
+
+/* ─── Toast ─────────────────────────────────────────────────────────────── */
+.toast { animation: toastIn 0.2s cubic-bezier(0.4, 0, 0.2, 1) both; }
+@keyframes toastIn {
+  from { opacity: 0; transform: translate(-50%, 8px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+
+
+/* ─── Delete with inline confirm ───────────────────────────────────────── */
+.del-btn, .soft-btn { opacity: 0.35; transition: opacity 0.15s ease, background 0.15s ease; }
+.reveal-on-hover:hover .del-btn, .del-btn:focus-visible,
+.reveal-on-hover:hover .soft-btn, .soft-btn:focus-visible { opacity: 1; }
+.del-btn:hover { background: var(--color-negative); border-color: var(--color-negative); color: #fff; }
+.confirm-btn {
+  border: 1px solid var(--line-strong); background: var(--color-card); color: var(--color-ink);
+  border-radius: 6px; padding: 2px 8px; font-size: 12px; cursor: pointer;
+}
+.confirm-btn.danger { border-color: var(--color-negative); color: var(--color-negative); }
+.confirm-btn.danger:hover { background: var(--color-negative); color: #fff; }
+
+/* ─── Loading screen ───────────────────────────────────────────────────── */
+.pome-bob { animation: pome-bob 2.4s ease-in-out infinite; transform-origin: 50% 90%; }
+@keyframes pome-bob { 0%, 100% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(-5px) rotate(2deg); } }
+.pome-fill { animation: pome-fill 2.8s ease-in-out infinite; transform-box: fill-box; transform-origin: 50% 100%; }
+@keyframes pome-fill { 0% { transform: scaleY(0); } 60%, 100% { transform: scaleY(1); } }
+.pome-seed { opacity: 0; transform-box: fill-box; transform-origin: center; animation: pome-seed 2.8s ease-out infinite; }
+@keyframes pome-seed { 0% { opacity: 0; transform: scale(0.2); } 12% { opacity: 1; transform: scale(1.15); } 20%, 80% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(0.8); } }
+.pome-bar { animation: pome-bar 1.4s ease-in-out infinite; }
+@keyframes pome-bar { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+.pome-tip { animation: pome-tip 0.4s ease-out; }
+@keyframes pome-tip { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .pome-bob, .pome-fill, .pome-bar, .pome-tip { animation: none; }
+  .pome-seed { animation: none; opacity: 1; }
+}
+
+/* ─── Phone layout (≤ 768px) ───────────────────────────────────────────────
+   Components use inline styles for the desktop layout; these classes override
+   them on small screens (hence !important). */
+.app-root { height: 100vh; height: 100dvh; }
+.m-only { display: none !important; }
+
+@media (max-width: 768px) {
+  .m-only { display: inline-flex !important; }
+  .m-hide { display: none !important; }
+
+  /* navigation: sidebar becomes a slide-in drawer */
+  .sidebar {
+    position: fixed; top: 0; bottom: 0; left: 0; z-index: 70; width: 272px !important;
+    transform: translateX(-105%); transition: transform 0.25s ease; box-shadow: 0 0 40px rgba(26,23,20,0.18);
+  }
+  .sidebar.open { transform: none; }
+  .cur-menu { right: 0 !important; }
+  .nav-backdrop { position: fixed; inset: 0; z-index: 65; background: rgba(26,23,20,0.3); }
+
+  .app-header { padding: 0 12px !important; gap: 8px; }
+  .page { padding: 18px 16px 40px !important; max-width: 100% !important; }
+  .page h1 { font-size: 30px !important; }
+
+  /* the tree stays as a soft backdrop, smaller */
+  .bg-tree { height: 58% !important; opacity: 0.28 !important; right: -60px !important; }
+
+  /* grids */
+  .m-stack { grid-template-columns: minmax(0, 1fr) !important; }
+  .m-2col  { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  .m-2col > * { border-left: none !important; }
+  .m-2col > *:nth-child(n+3) { border-top: 1px solid var(--line); }
+  .m-flat > * + * { border-left: none !important; padding-left: 0 !important; }
+
+  /* rows with many columns */
+  .row-tx       { grid-template-columns: minmax(0, 1fr) auto 30px !important; }
+  .row-budget   { grid-template-columns: minmax(0, 1fr) 80px 60px !important; gap: 10px !important; }
+  .row-budget > :nth-child(2) { grid-column: 1 / -1; grid-row: 2; }
+  .row-recur    { grid-template-columns: 46px minmax(0, 1fr) auto auto !important; row-gap: 6px !important; gap: 10px !important; }
+  .row-recur > :nth-child(1) { grid-row: 1 / span 2; align-self: start; }
+  .row-recur > :nth-child(3) { grid-column: 3 / 5; }
+  .row-recur > :nth-child(4) { grid-row: 2; grid-column: 2; text-align: left !important; min-width: 0 !important; }
+  .row-recur > :nth-child(5) { grid-row: 2; grid-column: 3; }
+  .row-recur > :nth-child(6) { grid-row: 2; grid-column: 4; }
+  .row-whatif   { grid-template-columns: minmax(0, 1fr) 70px !important; row-gap: 6px !important; }
+  .row-whatif > :nth-child(2) { grid-column: 1 / -1; grid-row: 2; }
+  .row-whatif > :nth-child(3) { display: none; }
+  .row-transfer { grid-template-columns: 52px minmax(0, 1fr) auto 26px !important; }
+
+  .hero-amount { font-size: 46px !important; }
+  .guide-step { grid-template-columns: 28px minmax(0, 1fr) !important; row-gap: 8px !important; }
+  .guide-step > button { grid-column: 2; justify-self: start; }
+
+  /* calendar: amount under the day number, without the currency sign */
+  .cal-cell { height: 52px !important; padding: 4px 3px !important; }
+  .cal-amt { position: static !important; margin-top: 8px; text-align: right; font-size: 9px !important; letter-spacing: -0.02em; }
+  .cal-card { padding: 16px 12px 12px !important; }
+
+  /* wide charts scroll sideways; "expand" opens them full screen */
+  .chart-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 0 -8px; padding: 0 8px; }
+  .chart-scroll > .chart-inner { min-width: 640px; }
+  .card-pad { padding: 16px !important; }
+
+  /* dialogs become bottom sheets */
+  .sheet { position: fixed !important; left: 0 !important; right: 0 !important; bottom: 0 !important; top: auto !important;
+    width: 100% !important; max-width: 100% !important; max-height: 92dvh; overflow-y: auto;
+    border-radius: 18px 18px 0 0 !important; transform: none !important; }
+  .sheet-wrap { align-items: flex-end !important; padding: 0 !important; }
+
+  /* auth: form only, brand as a small header */
+  .auth-grid { grid-template-columns: minmax(0, 1fr) !important; }
+  .auth-brand { min-height: 210px; border-right: none !important; border-bottom: 1px solid var(--line); }
+  .auth-brand p { font-size: 18px !important; top: 72px !important; }
+  .auth-brand svg[viewBox*="580"] { height: 120% !important; left: 82% !important; opacity: 0.3 !important; }
+  .auth-brand p { max-width: 75% !important; }
+
+  .toast { left: 16px !important; right: 16px !important; transform: none !important; max-width: none !important; bottom: 16px !important; }
+  .demo-banner { font-size: 12px !important; padding: 6px 10px 6px 14px !important; justify-content: space-between !important; }
+  .demo-banner .link-btn { padding: 4px 10px !important; font-size: 12px !important; white-space: nowrap; flex-shrink: 0; }
+  .auth-form { padding: 28px 20px 40px !important; }
+}
+
+/* touch screens have no hover: show actions that are hover-only on desktop */
+@media (hover: none) {
+  .reveal-on-hover .reveal, .del-btn, .soft-btn { opacity: 1 !important; }
+}
+
+/* full-screen chart: no rotate hint once the phone is sideways */
+@media (orientation: landscape) { .rotate-hint { display: none; } }
+
+@media (max-width: 768px) { .paid-match { margin-left: 0 !important; } }
