@@ -5,7 +5,7 @@ import { showGuide } from '../modules/onboarding/OnboardingGuide';
 
 /** Header: account avatar + sign out; in demo — a badge and a sign-up button */
 export function UserMenu({ onGoHome }: { onGoHome?: () => void }) {
-  const { status, user, signOut, exitDemo } = useSession();
+  const { status, user, signOut, signOutEverywhere, exitDemo } = useSession();
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
 
@@ -46,8 +46,11 @@ export function UserMenu({ onGoHome }: { onGoHome?: () => void }) {
           <button className="row-hover" onClick={() => { setOpen(false); showGuide(user.id); onGoHome?.(); }} style={{ width: '100%', textAlign: 'left', padding: '10px 14px', border: 'none', borderBottom: '1px solid var(--line)', background: 'transparent', cursor: 'pointer', fontSize: 13, color: 'var(--color-ink)' }}>
             {t('howToStart')}
           </button>
-          <button className="row-hover" onClick={() => { setOpen(false); void signOut(); }} style={{ width: '100%', textAlign: 'left', padding: '10px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 13, color: 'var(--color-ink)' }}>
+          <button className="row-hover" onClick={() => { setOpen(false); void signOut(); }} style={{ width: '100%', textAlign: 'left', padding: '10px 14px', border: 'none', borderBottom: '1px solid var(--line)', background: 'transparent', cursor: 'pointer', fontSize: 13, color: 'var(--color-ink)' }}>
             {t('signOut')}
+          </button>
+          <button className="row-hover" onClick={() => { setOpen(false); void signOutEverywhere(); }} style={{ width: '100%', textAlign: 'left', padding: '10px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 13, color: 'var(--color-negative)' }}>
+            {t('signOutAll')}
           </button>
         </div>
       )}

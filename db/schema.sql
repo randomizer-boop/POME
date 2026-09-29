@@ -86,6 +86,16 @@ begin
   end loop;
 end $$;
 
+-- A transfer that tops up a goal points to it (goal top-ups ≠ the savings %)
+alter table transfers add column if not exists goal_id uuid references goals(id) on delete set null;
+
+-- Per-account settings (savings % of income)
+create table if not exists user_settings (
+  user_id       text         primary key default (auth.user_id()),
+  savings_rate  numeric(4,3) not null default 0.05 check (savings_rate between 0 and 0.9),
+  updated_at    timestamptz  not null default now()
+);
+
 -- ─── Access: signed-in users only, and only their own rows ───────────────────
 
 grant usage on schema public to authenticated;
@@ -95,7 +105,7 @@ alter default privileges in schema public grant select, insert, update, delete o
 do $$
 declare t text;
 begin
-  foreach t in array array['accounts', 'recurring_payments', 'transactions', 'transfers', 'budget_allocations', 'goals'] loop
+  foreach t in array array['accounts', 'recurring_payments', 'transactions', 'transfers', 'budget_allocations', 'goals', 'user_settings'] loop
     execute format('alter table %I enable row level security', t);
     execute format('drop policy if exists "own rows" on %I', t);
     execute format(

@@ -11,16 +11,17 @@ import { billsPaidTotal, expenseTotal, flexibleTotal, incomeTotal } from '../mod
 import { buildBudget, budgetTotals } from '../modules/budget/logic';
 import { billsSummary, expectedIncome as expectedIncomeOf, unpaidThisPeriod } from '../modules/recurring/logic';
 import { computeSafeToSpend } from '../modules/safe-to-spend/logic';
-import { goalsPlannedTotal, goalsSavedTotal } from '../modules/goals/logic';
+import { goalsPlannedTotal, goalsSavedTotal, goalsThisMonth, isGoalTransfer } from '../modules/goals/logic';
 import { projectMonthEnd } from '../modules/forecast/logic';
 import { divide, percent, sub, sumBy } from '../shared/money';
-import { inPeriod, shiftPeriod } from '../shared/config';
+import { inPeriod, isoDay, shiftPeriod } from '../shared/config';
 import { payCycle } from '../modules/safe-to-spend/cycle';
-import { useSettings } from './Settings';
 
 export interface SummaryOptions {
-  /** fixed safety buffer in base currency (null = automatic) */
-  safetyBuffer?: number | null;
+  /** share of income to save, 0…0.9 (default 5%) */
+  savingsRate?: number;
+  /** day of the period to look at (safe-to-spend "as of" that day); default period.current */
+  day?: number;
 }
 
 export interface SummaryInput {
@@ -35,6 +36,39 @@ export interface SummaryInput {
   recurring: RecurringPayment[];
   allocations: Allocations;
   goals: Goal[];
+}
+
+type SafeInput = Pick<SummaryInput, 'period' | 'accounts' | 'allTransactions' | 'allTransfers' | 'recurring' | 'goals'>;
+
+/**
+ * Safe to spend "as of" a day of the period: only what had happened by the end of that day counts.
+ * The ONE formula behind every daily limit in the app (card, calendar, past days).
+ */
+export function safeOnDay({ period, accounts, allTransactions, allTransfers, recurring, goals }: SafeInput, day: number, savingsRate?: number) {
+  const dayPeriod = { ...period, current: day };
+  const asOf = isoDay(period, day);
+  const txsAsOf = allTransactions.filter(t => t.date <= asOf);
+  const xsAsOf = allTransfers.filter(x => x.date <= asOf);
+  const liquidAsOf = totalBalance(accountBalances(accounts, txsAsOf, xsAsOf), LIQUID_ACCOUNTS);
+  const cycle = payCycle(recurring, txsAsOf, dayPeriod);
+  // goals ← top-ups to goals this calendar month; the savings % ← other transfers to Savings in the pay cycle
+  const goalsMonth = goalsThisMonth(goals, xsAsOf.filter(x => inPeriod(x.date, period)));
+  const savedInCycle = savedThisPeriod(xsAsOf.filter(x => x.date >= cycle.start && !isGoalTransfer(x, goals)));
+  const safe = computeSafeToSpend({
+    liquidBalance: liquidAsOf, incomeReceived: cycle.incomeInCycle, expectedIncome: cycle.incomeDueToday, upcomingBills: cycle.billsTotal,
+    goalsPlanned: goalsMonth.planned, goalsPaid: goalsMonth.done, savedInCycle,
+    flexibleSpent: cycle.spentInCycle, spentToday: cycle.spentToday,
+    daysPassed: cycle.daysElapsed, daysTotal: cycle.length, savingsRate,
+  });
+  return { cycle, safe };
+}
+
+/** Each day's limit (as it was at the start of that day) and what was spent — for the calendar. Days 1 … period.current */
+export function dayLimits(input: SafeInput, savingsRate?: number): { limit: number; spent: number }[] {
+  return Array.from({ length: input.period.current }, (_, i) => {
+    const { safe } = safeOnDay(input, i + 1, savingsRate);
+    return { limit: safe.todayLimit, spent: safe.spentToday };
+  });
 }
 
 /** Pure: every number the pages show for a period (all in base currency). Unit-tested. */
@@ -52,10 +86,11 @@ export function summarize({ period, accounts, transactions, transfers, allTransa
   const flexibleSpent = flexibleTotal(transactions);
 
   // planned money this period (not in actual totals until paid/received)
-  const unpaid = unpaidThisPeriod(recurring, transactions, period);
+  // full history: a bill paid early (end of last month) or late still finds its payment
+  const unpaid = unpaidThisPeriod(recurring, allTransactions, period);
   const billsUpcoming = sumBy(unpaid, r => r.amount);
-  const expectedIncome = expectedIncomeOf(recurring, transactions, period);
-  const bills = billsSummary(recurring, transactions, period);
+  const expectedIncome = expectedIncomeOf(recurring, allTransactions, period);
+  const bills = billsSummary(recurring, allTransactions, period);
 
   const budget = buildBudget(allocations, transactions);
   const budgetSum = budgetTotals(budget);
@@ -64,12 +99,9 @@ export function summarize({ period, accounts, transactions, transfers, allTransa
   const goalsSaved = goalsSavedTotal(goals);
 
   // safe to spend covers the pay cycle (until the next income), not just the month
-  const cycle = payCycle(recurring, allTransactions, period);
-  const safe = computeSafeToSpend({
-    liquidBalance, incomeReceived: cycle.incomeInCycle, expectedIncome: cycle.incomeDueToday, upcomingBills: cycle.billsTotal,
-    goalsPlanned, savedThisMonth: saved, flexibleSpent: cycle.spentInCycle, spentToday: cycle.spentToday,
-    daysPassed: cycle.daysElapsed, daysTotal: cycle.length, bufferAmount: opts.safetyBuffer,
-  });
+  // a later day of the month = forecast: today's data, that day's position in the cycle, nothing spent yet that day
+  const day = Math.max(1, Math.min(period.total, opts.day ?? period.current));
+  const { cycle, safe } = safeOnDay({ period, accounts, allTransactions, allTransfers, recurring, goals }, day, opts.savingsRate);
 
   const prev = shiftPeriod(period, -1);
   const lastMonthSpent = flexibleTotal(allTransactions.filter(t => inPeriod(t.date, prev)));
@@ -94,11 +126,19 @@ export function summarize({ period, accounts, transactions, transfers, allTransa
 
 export type MonthSummary = ReturnType<typeof summarize>;
 
-export function useMonthSummary(): MonthSummary {
-  const { period, accounts, transactions, transfers, allTransactions, allTransfers, recurring, allocations, goals } = useFinance();
-  const { safetyBuffer } = useSettings();
+/** Daily limits for the calendar — same formula as the Safe-to-spend card */
+export function useDayLimits() {
+  const { period, accounts, allTransactions, allTransfers, recurring, goals, savingsRate } = useFinance();
   return useMemo(
-    () => summarize({ period, accounts, transactions, transfers, allTransactions, allTransfers, recurring, allocations, goals }, { safetyBuffer }),
-    [period, accounts, transactions, transfers, allTransactions, allTransfers, recurring, allocations, goals, safetyBuffer],
+    () => dayLimits({ period, accounts, allTransactions, allTransfers, recurring, goals }, savingsRate),
+    [period, accounts, allTransactions, allTransfers, recurring, goals, savingsRate],
+  );
+}
+
+export function useMonthSummary(): MonthSummary {
+  const { period, viewDay, accounts, transactions, transfers, allTransactions, allTransfers, recurring, allocations, goals, savingsRate } = useFinance();
+  return useMemo(
+    () => summarize({ period, accounts, transactions, transfers, allTransactions, allTransfers, recurring, allocations, goals }, { savingsRate, day: viewDay }),
+    [period, viewDay, accounts, transactions, transfers, allTransactions, allTransfers, recurring, allocations, goals, savingsRate],
   );
 }

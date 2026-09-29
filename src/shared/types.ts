@@ -45,6 +45,8 @@ export interface Transfer {
   amount: number;         // always positive
   note?: string;
   currency?: Currency;
+  /** set when this transfer is a contribution to a goal (Goals → Top up) */
+  goalId?: string;
 }
 
 export type Frequency = 'monthly' | 'yearly';
@@ -61,6 +63,8 @@ export interface RecurringPayment {
   month?: number;         // 0-based month, yearly only
   active: boolean;        // paused payments are ignored everywhere
   currency?: Currency;
+  /** local date the rule was added (YYYY-MM-DD); occurrences before it aren't owed */
+  createdAt?: string;
 }
 
 /** Planned monthly amount per category */

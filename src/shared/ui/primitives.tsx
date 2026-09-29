@@ -1,6 +1,6 @@
 // ─── Presentational building blocks (no business logic) ──────────────────────
 
-import type { CSSProperties, ReactNode } from 'react';
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import { t } from '../i18n';
 
 export function Label({ children, color }: { children: ReactNode; color?: string }) {
@@ -157,4 +157,33 @@ export function FormMessage({ error, success }: { error?: string | null; success
   if (error) return <div role="alert" style={{ fontSize: 13, color: 'var(--color-negative)', marginBottom: 10 }}>{error}</div>;
   if (success) return <div style={{ fontSize: 13, color: 'var(--color-positive)', marginBottom: 10 }}>✓ {success}</div>;
   return null;
+}
+
+/**
+ * Smoothly opens/closes its content (height + fade), and unmounts it once closed.
+ * Grid-rows trick: 0fr ↔ 1fr animates to the content's real height without measuring it.
+ */
+export function Collapse({ open, children }: { open: boolean; children: ReactNode }) {
+  const [mounted, setMounted] = useState(open);
+  const [shown, setShown] = useState(open);
+  useEffect(() => {
+    if (open) {
+      setMounted(true);
+      // next frame, so the browser sees the closed state first and animates from it
+      const id = requestAnimationFrame(() => requestAnimationFrame(() => setShown(true)));
+      return () => cancelAnimationFrame(id);
+    }
+    setShown(false);
+    const id = window.setTimeout(() => setMounted(false), 320);
+    return () => window.clearTimeout(id);
+  }, [open]);
+  if (!mounted) return null;
+  return (
+    <div className="collapse" style={{
+      display: 'grid', gridTemplateRows: shown ? '1fr' : '0fr', opacity: shown ? 1 : 0,
+      transition: 'grid-template-rows 0.3s cubic-bezier(0.4,0,0.2,1), opacity 0.25s ease',
+    }}>
+      <div style={{ overflow: 'hidden', minHeight: 0 }}>{children}</div>
+    </div>
+  );
 }

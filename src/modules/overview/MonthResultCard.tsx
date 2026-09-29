@@ -10,7 +10,7 @@ import { useMonthSummary } from '../../store/useMonthSummary';
 export function MonthResultCard() {
   const { period } = useFinance();
   const { income, expenses, saved, budgetSum, monthResult } = useMonthSummary();
-  const { money } = useMoney();
+  const { money, minus } = useMoney();
   const loaded = useProgressLoad();
   const left = monthResult;
   const over = left < 0;
@@ -29,8 +29,8 @@ export function MonthResultCard() {
         {over ? '−' : ''}{money(Math.abs(left), { maxFrac: 0 })}
       </div>
       <LedgerRow label={t('income')} amount={`+${money(income, { maxFrac: 0 })}`} />
-      <LedgerRow label={t('expenses')} amount={`−${money(expenses, { maxFrac: 0 })}`} />
-      <LedgerRow label={t('monthResultSaved')} amount={`−${money(Math.max(0, saved), { maxFrac: 0 })}`} />
+      <LedgerRow label={t('expenses')} amount={minus(expenses, { maxFrac: 0 })} />
+      <LedgerRow label={t('monthResultSaved')} amount={minus(Math.max(0, saved), { maxFrac: 0 })} />
       {budgetSum.planned > 0 && (
         <div style={{ marginTop: 14 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--color-ink-2)', marginBottom: 6 }}>

@@ -1,6 +1,6 @@
 // ─── UI settings: display currency + language ─────────────────────────────────
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { Currency } from '../shared/types';
 import { CURRENCIES } from '../shared/config';
 import { FALLBACK, fetchRates, isFresh, readCachedRates, type RatesState } from '../shared/rates';
@@ -15,10 +15,6 @@ interface Settings {
   ratesUpdatedAt: number;
   ratesLive: boolean;
   rates: Record<Currency, number>;
-  /** Safety buffer chosen by the user, in base currency; null = automatic (5% of income) */
-  safetyBuffer: number | null;
-  /** amount in base currency, or null to go back to automatic */
-  setSafetyBuffer: (base: number | null) => void;
   lang: Lang;
   setLang: (l: Lang) => void;
 }
@@ -26,16 +22,6 @@ interface Settings {
 const Ctx = createContext<Settings | null>(null);
 const LANG_KEY = 'pome.lang';
 const CURRENCY_KEY = 'pome.currency';
-const BUFFER_KEY = 'pome.buffer.v1';
-type StoredBuffer = { amount: number; currency: Currency } | null;
-
-function readBuffer(): StoredBuffer {
-  try {
-    const v = JSON.parse(localStorage.getItem(BUFFER_KEY) ?? 'null');
-    return v && typeof v.amount === 'number' && CURRENCIES.includes(v.currency) ? v : null;
-  } catch { return null; }
-}
-
 function initialCurrency(): Currency {
   try {
     const saved = localStorage.getItem(CURRENCY_KEY) as Currency | null;
@@ -68,13 +54,6 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     try { localStorage.setItem(CURRENCY_KEY, currency); } catch { /* storage unavailable */ }
   }, [currency]);
 
-  // kept in the currency it was typed in, so the amount stays exact whatever the rate
-  const [buffer, setBuffer] = useState<StoredBuffer>(readBuffer);
-  const setSafetyBuffer = useCallback((base: number | null) => {
-    const next: StoredBuffer = base === null ? null : { amount: Math.round(base * rates.rates[currency] * 100) / 100, currency };
-    setBuffer(next);
-    try { if (next) localStorage.setItem(BUFFER_KEY, JSON.stringify(next)); else localStorage.removeItem(BUFFER_KEY); } catch { /* ignore */ }
-  }, [rates, currency]);
   const [lang, setLang] = useState<Lang>(initialLang);
 
   // Must run before children render so every t()/format call uses the right language
@@ -89,8 +68,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const value = useMemo(() => ({
     currency, rate: rates.rates[currency], setCurrency, lang, setLang,
     ratesUpdatedAt: rates.updatedAt, ratesLive: rates.live, rates: rates.rates,
-    safetyBuffer: buffer ? buffer.amount / (rates.rates[buffer.currency] || 1) : null, setSafetyBuffer,
-  }), [currency, lang, rates, buffer, setSafetyBuffer]);
+  }), [currency, lang, rates]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
@@ -106,6 +84,11 @@ export function useMoney() {
   const { currency, rate } = useSettings();
   return useMemo(() => {
     const money = (v: number, opts?: { compact?: boolean; maxFrac?: number }) => fmtCurrency(v * rate, currency, opts);
-    return { money, currency, rate };
+    /** "−X" for an amount taken away; plain "0" instead of "−0" */
+    const minus = (v: number, opts?: { compact?: boolean; maxFrac?: number }) => {
+      const s = money(Math.abs(v), opts);
+      return /[1-9]/.test(s) ? `−${s}` : s;
+    };
+    return { money, minus, currency, rate };
   }, [currency, rate]);
 }

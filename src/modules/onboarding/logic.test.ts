@@ -1,26 +1,32 @@
 import { describe, expect, it } from 'vitest';
-import { nextStep, stepsDone } from './logic';
+import { alreadyDue, nextStep, stepsDone } from './logic';
 
 const empty = { accounts: [], transactions: [], recurring: [], allocations: {}, goals: [] };
+const salary = { id: 's', name: 'Salary', category: 'Income', amount: 1000, accountId: 'main' as const, frequency: 'monthly' as const, day: 5, active: true };
+const rent = { ...salary, id: 'r', name: 'Rent', category: 'Housing' };
 
-describe('onboarding steps', () => {
-  it('starts with income for a new account', () => {
-    const done = stepsDone(empty);
-    expect(Object.values(done).every(v => !v)).toBe(true);
-    expect(nextStep(done)).toBe('balances');
+describe('setup wizard steps', () => {
+  it('starts with the savings %, then income — before balances', () => {
+    expect(nextStep(stepsDone(empty))).toBe('savings');
+    expect(nextStep(stepsDone({ ...empty, savingsChosen: true }))).toBe('income');
   });
 
-  it('marks steps from data; a paid bill is not the "first expense"', () => {
-    const done = stepsDone({
-      ...empty,
-      transactions: [
-        { id: '1', date: '2026-09-01', description: 'Salary', category: 'Income', amount: 1000, accountId: 'main' },
-        { id: '2', date: '2026-09-02', description: 'Rent', category: 'Housing', amount: -400, accountId: 'main', recurringId: 'r' },
-      ],
-      allocations: { Groceries: 300 },
-      accounts: [{ id: 'main', openingBalance: 500 }],
-    });
-    expect(done).toEqual({ balances: true, income: true, recurring: false, budget: true, goal: false, expense: false });
-    expect(nextStep(done)).toBe('recurring');
+  it('income and bills are told apart; balances come after them', () => {
+    const d = stepsDone({ ...empty, savingsChosen: true, recurring: [salary] });
+    expect(d.income).toBe(true);
+    expect(d.bills).toBe(false);
+    expect(nextStep(d)).toBe('bills');
+    expect(nextStep(stepsDone({ ...empty, savingsChosen: true, recurring: [salary, rent] }))).toBe('balances');
+  });
+
+  it('skipped / confirmed steps count as done', () => {
+    const d = stepsDone({ ...empty, savingsChosen: true, confirmed: ['income', 'bills', 'balances', 'budget'] });
+    expect(nextStep(d)).toBe('goal');
+    expect(nextStep(stepsDone({ ...empty, savingsChosen: true, confirmed: ['income', 'bills', 'balances', 'budget', 'goal'] }))).toBeNull();
+  });
+
+  it('asks "already received/paid?" only for days that have come', () => {
+    expect(alreadyDue(5, 29)).toBe(true);
+    expect(alreadyDue(30, 29)).toBe(false);
   });
 });

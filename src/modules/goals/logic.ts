@@ -1,4 +1,4 @@
-import type { Goal, Period } from '../../shared/types';
+import type { Goal, Period, Transfer } from '../../shared/types';
 import { divide, percent, sub, sum } from '../../shared/money';
 
 /** Calendar months left for a goal, this month included (Sep → Mar = 7). 0 when the deadline has passed. */
@@ -16,6 +16,34 @@ export const goalsPlannedTotal = (goals: Goal[]) =>
   sum(goals.map(g => Math.min(goalRemaining(g), Math.max(0, g.monthlyContribution))));
 
 export const goalsSavedTotal = (goals: Goal[]) => sum(goals.map(g => g.saved));
+
+// ─── Goals ≠ the savings % ────────────────────────────────────────────────────
+// A goal is paid only by transfers made TO THAT GOAL (Goals → Top up, tagged with its id).
+// Any other transfer to Savings is general saving (the savings %), never a goal contribution.
+
+/** The goal a transfer contributes to: tagged with its id, or (data saved before goal ids) into Savings with the goal's name as note */
+export const goalOfTransfer = (x: Transfer, goals: Goal[]): Goal | undefined =>
+  x.goalId ? goals.find(g => g.id === x.goalId)
+    : x.to === 'savings' && x.note ? goals.find(g => g.name === x.note) : undefined;
+
+export const isGoalTransfer = (x: Transfer, goals: Goal[]) => !!x.goalId || !!goalOfTransfer(x, goals);
+
+/**
+ * This month's goal contributions, goal by goal: planned vs. actually moved INTO that goal.
+ * `monthTransfers` = this calendar month's transfers (so far). Over-paying one goal doesn't cover another.
+ */
+export function goalsThisMonth(goals: Goal[], monthTransfers: Transfer[]) {
+  const rows = goals.map(g => {
+    const mine = monthTransfers.filter(x => goalOfTransfer(x, goals)?.id === g.id);
+    const paid = Math.max(0, sum(mine.map(x => (x.to === 'savings' ? x.amount : 0) - (x.from === 'savings' ? x.amount : 0))));
+    // what was left to save at the start of the month (this month's contributions are already in `saved`)
+    const leftBefore = Math.max(0, sub(g.target, sub(g.saved, paid)));
+    const planned = Math.min(Math.max(0, g.monthlyContribution), leftBefore);
+    const done = Math.min(paid, planned);
+    return { goal: g, planned, paid, done, left: sub(planned, done) };
+  });
+  return { rows, planned: sum(rows.map(r => r.planned)), done: sum(rows.map(r => r.done)), left: sum(rows.map(r => r.left)) };
+}
 
 export function goalProgress(goal: Goal, p: Period) {
   const remaining = goalRemaining(goal);

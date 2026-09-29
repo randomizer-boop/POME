@@ -8,20 +8,18 @@ import { sumBy } from '../../shared/money';
 const SEG = {
   bills:  '#C98C7E',
   goals:  '#9A8FB8',
-  buffer: '#B9AE9E',
   left:   '#9DBB96',
 } as const;
 
 type Key = keyof typeof SEG;
 
-/** Money available this month (balance + expected income) split into bills / goals / buffer / free */
+/** Money available until payday / month end (balance + income due today) split into bills / goals / free */
 export function MonthSplitBar({ safe, money }: { safe: SafeToSpend; money: (v: number) => string }) {
   const loaded = useProgressLoad();
   const [hover, setHover] = useState<Key | null>(null);
   const parts: { key: Key; label: string; value: number }[] = [
     { key: 'bills',  label: t('segBills'),  value: safe.upcomingBills },
     { key: 'goals',  label: t('segGoals'),  value: safe.goalsLeft },
-    { key: 'buffer', label: t('segBuffer'), value: safe.safetyBuffer },
     { key: 'left',   label: t('segLeft'),   value: Math.max(0, safe.spendable) },
   ];
   const total = sumBy(parts, p => p.value);
@@ -48,7 +46,7 @@ export function MonthSplitBar({ safe, money }: { safe: SafeToSpend; money: (v: n
           />
         ))}
       </div>
-      <div className="m-2col" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', marginTop: 10, rowGap: 8 }}>
+      <div className="m-2col" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', marginTop: 10, rowGap: 8 }}>
         {parts.map((p, i) => (
           <div
             key={p.key}

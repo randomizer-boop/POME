@@ -7,17 +7,19 @@
 //
 // Actions return whether the change was accepted, so forms can show the right state.
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Account, Allocations, Goal, Period, RecurringPayment, Transaction, Transfer, AccountType } from '../shared/types';
 import { currentPeriod, inPeriod, isoDay, monthDiff, shiftPeriod } from '../shared/config';
 import * as seed from '../data/seed';
-import { loadUserData, repo } from '../data/repository';
+import { loadUserData, loadUserSettings, repo } from '../data/repository';
+import { DEFAULT_SAVINGS_RATE, clampSavingsRate } from '../modules/safe-to-spend/logic';
 import { neon } from '../lib/neon';
 import { useSession } from './Session';
 import { t } from '../shared/i18n';
 import { useSettings } from './Settings';
 import { toBaseData, toRaw, type RawData } from '../data/currency';
-import { openingFor } from '../modules/accounts/logic';
+import { accountBalances, openingFor } from '../modules/accounts/logic';
+import { goalOfTransfer } from '../modules/goals/logic';
 
 export type Notice = { kind: 'readOnly' } | { kind: 'error'; message: string };
 
@@ -33,6 +35,23 @@ interface FinanceState {
   /** −1 = previous month, +1 = next (never past the current month) */
   shiftMonth: (delta: number) => void;
   goToCurrentMonth: () => void;
+  /** Day of `period` being looked at (safe to spend "as of" that day). Default: today / last day of a past month */
+  viewDay: number;
+  /** true when looking at the real today */
+  isToday: boolean;
+  /** a later day of the current month: a forecast ("if nothing more is spent before then") */
+  isFuture: boolean;
+  /** true when a specific day was picked (a past month then shows that day instead of the month result) */
+  dayPicked: boolean;
+  /** −1 = the day before, +1 = the day after (up to the end of the current month; crosses months back) */
+  shiftDay: (delta: number) => void;
+  selectDay: (day: number) => void;
+  goToToday: () => void;
+  /** This account's share of income to save (stored per account in the DB; default 5%) */
+  savingsRate: number;
+  /** the user picked the % themselves (onboarding step) */
+  savingsChosen: boolean;
+  setSavingsRate: (rate: number) => boolean;
   /** true in demo mode — nothing can be changed */
   readOnly: boolean;
   loading: boolean;
@@ -59,7 +78,14 @@ interface FinanceActions {
   addTransaction: (tx: Omit<Transaction, 'id'>) => string | null;
   removeTransaction: (id: string) => boolean;
   addTransfer: (x: Omit<Transfer, 'id'>) => boolean;
-  addRecurring: (r: Omit<RecurringPayment, 'id' | 'active'>) => boolean;
+  /** returns the new rule's id (null if refused) */
+  addRecurring: (r: Omit<RecurringPayment, 'id' | 'active'>) => string | null;
+  /**
+   * Records money that already moved and is ALREADY in the account balance the user typed
+   * (salary that has arrived, a bill already paid): the transaction is added for history and
+   * stats, and the account's starting balance shifts so the balance itself doesn't change.
+   */
+  addTransactionKeepBalance: (tx: Omit<Transaction, 'id'>) => boolean;
   toggleRecurring: (id: string) => boolean;
   /** Records today's payment of a recurring bill (a transaction linked to it) */
   payRecurring: (id: string) => boolean;
@@ -97,10 +123,20 @@ const DEMO: RawData = {
   allocCurrency: {},
 };
 
+/** Database error → a message people can act on */
+export function dbErrorText(message: string): string {
+  // DB is older than the app: point to the migration instead of a raw SQL error
+  if (/currency/i.test(message) && /(does not exist|schema cache|could not find)/i.test(message)) return t('errMigration');
+  if (/user_settings/i.test(message)) return t('errMigration004');
+  if (/goal_id/i.test(message)) return t('errMigration005');
+  return t('errSaveFailed', { x: message });
+}
+
 const EMPTY: RawData = { accounts: [], transactions: [], transfers: [], recurring: [], allocations: {}, goals: [], allocCurrency: {} };
 
 export function FinanceProvider({ children }: { children: ReactNode }) {
-  const { status } = useSession();
+  const { status, user } = useSession();
+  const userId = user?.id ?? '';
   const readOnly = status !== 'user';
   // New amounts are saved in the currency they were typed in (the one selected in the sidebar)
   const { rates, currency: inputCurrency } = useSettings();
@@ -117,6 +153,34 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const [notice, setNotice] = useState<Notice | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
+  // Savings % — per account. DB table user_settings (migration 004); until it exists, a per-account
+  // copy in this browser keeps it working (never shared between accounts).
+  const [savingsPref, setSavingsPref] = useState<number | null>(null);
+  const localKey = (uid: string) => `pome.savings.${uid}`;
+  const readLocal = (uid: string) => { try { const v = Number(localStorage.getItem(localKey(uid))); return localStorage.getItem(localKey(uid)) !== null && Number.isFinite(v) ? v : null; } catch { return null; } };
+  useEffect(() => {
+    try { localStorage.removeItem('pome.savings.v1'); } catch { /* old shared key */ }
+    if (status !== 'user' || !neon || !userId) { setSavingsPref(null); return; }
+    let cancelled = false;
+    setSavingsPref(readLocal(userId));
+    loadUserSettings(neon)
+      .then(s => { if (!cancelled && s.savingsRate !== null) setSavingsPref(s.savingsRate); })
+      .catch(() => { /* table not created yet → keep the local copy */ });
+    return () => { cancelled = true; };
+  }, [status, userId, reloadKey]);
+
+  const setSavingsRate = useCallback((rate: number) => {
+    if (readOnly || !neon || !userId) { setNotice({ kind: 'readOnly' }); return false; }
+    const next = clampSavingsRate(rate);
+    setSavingsPref(next);
+    try { localStorage.setItem(localKey(userId), String(next)); } catch { /* ignore */ }
+    repo.saveSavingsRate(neon, next).catch(e => {
+      const message = e instanceof Error ? e.message : String(e);
+      if (/user_settings|schema cache|does not exist/i.test(message)) setNotice({ kind: 'error', message: t('errMigration004') });
+    });
+    return true;
+  }, [readOnly, userId]);
+
   // Load the right data set whenever the session changes
   useEffect(() => {
     if (status !== 'user' || !neon) { setData(DEMO); setLoading(false); setLoadError(null); return; }
@@ -131,14 +195,19 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   }, [status, reloadKey]);
 
   /** Apply locally now, persist in the background, undo if it fails */
+  // Writes go to the database strictly one after another, in the order they were made:
+  // a transaction that points to a just-created recurring payment must not arrive first
+  // (the database would reject it — the payment doesn't exist yet).
+  const writeQueue = useRef<Promise<void>>(Promise.resolve());
+
+  /** Apply locally now, persist in the background (queued); if a write fails, reload from the database */
   const commit = useCallback((apply: (d: RawData) => RawData, persist: () => Promise<void>) => {
-    let before: RawData | null = null;
-    setData(d => { before = d; return apply(d); });
-    persist().catch(e => {
-      if (before) setData(before);
+    setData(apply);
+    writeQueue.current = writeQueue.current.then(persist).catch(e => {
       const message = e instanceof Error ? e.message : String(e);
-      // DB is older than the app: point to the migration instead of a raw SQL error
-      setNotice({ kind: 'error', message: /column "?currency"?/i.test(message) ? t('errMigration') : message });
+      setNotice({ kind: 'error', message: dbErrorText(message) });
+      // the database is the source of truth: show exactly what got saved
+      setReloadKey(k => k + 1);
     });
   }, []);
 
@@ -175,13 +244,32 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     return true;
   }, [readOnly, commit, refuse, rates, inputCurrency]);
 
-  const addRecurring = useCallback((r: Omit<RecurringPayment, 'id' | 'active'>) => {
+  const addRecurring = useCallback((r: Omit<RecurringPayment, 'id' | 'active'>): string | null => {
+    if (readOnly || !neon) { refuse(); return null; }
+    const db = neon;
+    const full: RecurringPayment = { ...r, id: newId(), active: true, amount: toRaw(r.amount, rates, inputCurrency), currency: inputCurrency, createdAt: isoDay(today, today.current) };
+    commit(d => ({ ...d, recurring: [...d.recurring, full] }), () => repo.insertRecurring(db, full));
+    return full.id;
+  }, [readOnly, commit, refuse, rates, inputCurrency, today]);
+
+  const addTransactionKeepBalance = useCallback((tx: Omit<Transaction, 'id'>) => {
     if (readOnly || !neon) return refuse();
     const db = neon;
-    const full: RecurringPayment = { ...r, id: newId(), active: true, amount: toRaw(r.amount, rates, inputCurrency), currency: inputCurrency };
-    commit(d => ({ ...d, recurring: [...d.recurring, full] }), () => repo.insertRecurring(db, full));
+    const id = newId();
+    const raw: Transaction = { ...tx, id, amount: toRaw(tx.amount, rates, inputCurrency), currency: inputCurrency };
+    // balance stays what it is now: opening = current − (all flows incl. the new one)
+    const current = accountBalances(view.accounts, view.transactions, view.transfers)[tx.accountId];
+    const opening = toRaw(openingFor(tx.accountId, current, [...view.transactions, { ...tx, id }], view.transfers), rates, inputCurrency);
+    commit(
+      d => ({
+        ...d,
+        transactions: [raw, ...d.transactions],
+        accounts: d.accounts.map(a => (a.id === tx.accountId ? { ...a, openingBalance: opening, currency: inputCurrency } : a)),
+      }),
+      async () => { await repo.insertTransaction(db, raw); await repo.setOpeningBalance(db, tx.accountId, opening, inputCurrency); },
+    );
     return true;
-  }, [readOnly, commit, refuse, rates, inputCurrency]);
+  }, [readOnly, commit, refuse, view, rates, inputCurrency]);
 
   const toggleRecurring = useCallback((id: string) => {
     if (readOnly || !neon) return refuse();
@@ -224,7 +312,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     const saved = Math.max(0, goal.saved + toRaw(amount, rates, goal.currency ?? 'USD'));
     const transfer: Transfer | null = from === 'savings' ? null : {
       id: newId(), date: isoDay(today, today.current), from, to: 'savings',
-      amount: toRaw(amount, rates, inputCurrency), currency: inputCurrency, note: goal.name,
+      amount: toRaw(amount, rates, inputCurrency), currency: inputCurrency, note: goal.name, goalId: goal.id,
     };
     commit(
       d => ({
@@ -266,12 +354,26 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     return true;
   }, [readOnly, commit, refuse, view, rates, inputCurrency]);
 
+  /** Deleting a goal top-up also takes it back out of the goal (goal.saved and the transfer stay in sync) */
   const removeTransfer = useCallback((id: string) => {
     if (readOnly || !neon) return refuse();
     const db = neon;
-    commit(d => ({ ...d, transfers: d.transfers.filter(x => x.id !== id) }), () => repo.deleteTransfer(db, id));
+    const x = view.transfers.find(t => t.id === id);
+    const goal = x && x.to === 'savings' ? goalOfTransfer(x, data.goals) : undefined;
+    const saved = goal && x ? Math.max(0, goal.saved - toRaw(x.amount, rates, goal.currency ?? 'USD')) : null;
+    commit(
+      d => ({
+        ...d,
+        transfers: d.transfers.filter(t => t.id !== id),
+        goals: goal && saved !== null ? d.goals.map(g => (g.id === goal.id ? { ...g, saved } : g)) : d.goals,
+      }),
+      async () => {
+        await repo.deleteTransfer(db, id);
+        if (goal && saved !== null) await repo.setGoalSaved(db, goal.id, saved);
+      },
+    );
     return true;
-  }, [readOnly, commit, refuse]);
+  }, [readOnly, commit, refuse, view, data.goals, rates]);
 
   const removeRecurring = useCallback((id: string) => {
     if (readOnly || !neon) return refuse();
@@ -314,14 +416,31 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     const oldest = dates.reduce((a, b) => (a < b ? a : b));
     return Math.min(0, monthDiff(today, { year: Number(oldest.slice(0, 4)), index: Number(oldest.slice(5, 7)) - 1 }));
   }, [data.transactions, data.transfers, today]);
-  const shiftMonth = useCallback((delta: number) => setOffset(o => Math.max(minOffset, Math.min(0, o + delta))), [minOffset]);
-  const goToCurrentMonth = useCallback(() => setOffset(0), []);
-  // leaving the account/demo → back to this month
-  useEffect(() => { setOffset(0); }, [status]);
+  const [pickedDay, setPickedDay] = useState<number | null>(null);
+  const shiftMonth = useCallback((delta: number) => { setPickedDay(null); setOffset(o => Math.max(minOffset, Math.min(0, o + delta))); }, [minOffset]);
+  const goToCurrentMonth = useCallback(() => { setPickedDay(null); setOffset(0); }, []);
+  // leaving the account/demo → back to today
+  useEffect(() => { setOffset(0); setPickedDay(null); }, [status]);
+
+  // past months: up to their last day; the current month: up to its last day too (later days = forecast)
+  const viewDay = Math.min(pickedDay ?? period.current, offset === 0 ? period.total : period.current);
+  const goToDate = useCallback((d: Date) => {
+    const lastDay = new Date(today.year, today.index, today.total);
+    if (d > lastDay) d = lastDay;
+    const o = monthDiff(today, { year: d.getFullYear(), index: d.getMonth() });
+    if (o < minOffset) return;
+    setOffset(o);
+    setPickedDay(o === 0 && d.getDate() === today.current ? null : d.getDate());
+  }, [today, minOffset]);
+  const shiftDay = useCallback((delta: number) => goToDate(new Date(period.year, period.index, viewDay + delta)), [goToDate, period, viewDay]);
+  const selectDay = useCallback((day: number) => goToDate(new Date(period.year, period.index, day)), [goToDate, period]);
 
   const value = useMemo(() => ({
     period, readOnly, loading, loadError,
     today, isCurrentMonth: offset === 0, canGoBack: offset > minOffset, canGoForward: offset < 0, shiftMonth, goToCurrentMonth,
+    viewDay, isToday: offset === 0 && viewDay === today.current, isFuture: offset === 0 && viewDay > today.current, dayPicked: pickedDay !== null,
+    shiftDay, selectDay, goToToday: goToCurrentMonth,
+    savingsRate: savingsPref ?? DEFAULT_SAVINGS_RATE, savingsChosen: savingsPref !== null, setSavingsRate,
     accounts: view.accounts,
     transactions: view.transactions.filter(t => inPeriod(t.date, period)),
     transfers: view.transfers.filter(x => inPeriod(x.date, period)),
@@ -334,9 +453,9 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     dismissNotice: () => setNotice(null),
     reload: () => setReloadKey(k => k + 1),
     guard, addTransaction, removeTransaction, addTransfer, addRecurring, toggleRecurring,
-    payRecurring, addGoal, contributeToGoal, removeGoal, removeTransfer, removeRecurring, setAllocation, removeAllocation, linkPayment, setAccountBalance,
-  }), [period, today, offset, minOffset, shiftMonth, goToCurrentMonth, readOnly, loading, loadError, view, notice, guard, addTransaction, removeTransaction, addTransfer, addRecurring, toggleRecurring,
-    payRecurring, addGoal, contributeToGoal, removeGoal, removeTransfer, removeRecurring, setAllocation, removeAllocation, linkPayment, setAccountBalance]);
+    addTransactionKeepBalance, payRecurring, addGoal, contributeToGoal, removeGoal, removeTransfer, removeRecurring, setAllocation, removeAllocation, linkPayment, setAccountBalance,
+  }), [period, today, offset, minOffset, shiftMonth, goToCurrentMonth, viewDay, pickedDay, shiftDay, selectDay, savingsPref, setSavingsRate, readOnly, loading, loadError, view, notice, guard, addTransaction, removeTransaction, addTransfer, addRecurring, toggleRecurring,
+    addTransactionKeepBalance, payRecurring, addGoal, contributeToGoal, removeGoal, removeTransfer, removeRecurring, setAllocation, removeAllocation, linkPayment, setAccountBalance]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

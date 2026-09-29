@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { Transaction, Transfer } from '../../shared/types';
+import { Deer } from '../../shared/ui/Deer';
 import { t, catLabel, descLabel, goalLabel } from '../../shared/i18n';
 import { fmtDate, monthName } from '../../shared/format';
 import { colorOf } from '../../shared/categories';
@@ -75,7 +76,8 @@ export function TransactionsPage() {
       </div>
 
       {dates.length === 0 ? (
-        <Card style={{ textAlign: 'center', padding: '56px 0', color: 'var(--color-ink-3)' }}>
+        <Card style={{ textAlign: 'center', padding: '40px 0 48px', color: 'var(--color-ink-3)' }}>
+          <Deer pose="front" size={104} style={{ margin: "0 auto 14px" }} />
           <div style={{ fontSize: 15, fontWeight: 500, color: 'var(--color-ink-2)', marginBottom: 4 }}>{t('noTx')}</div>
           <div style={{ fontSize: 13 }}>{t('noTxHint')}</div>
         </Card>

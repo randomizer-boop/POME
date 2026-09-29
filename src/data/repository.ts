@@ -3,6 +3,7 @@
 // money in major units). Everything is scoped to the signed-in user by RLS,
 // so queries never need a user_id filter.
 
+import { toIso } from '../shared/dates';
 import type { Account, AccountType, Allocations, Currency, Goal, RecurringPayment, Transaction, Transfer } from '../shared/types';
 import type { NeonClient } from '../lib/neon';
 
@@ -54,10 +55,13 @@ export const mapTransfer = (r: Row): Transfer => ({
   amount: fromMinor(r.amount_minor as number),
   ...(r.note ? { note: r.note as string } : {}),
   currency: cur(r),
+  ...(r.goal_id ? { goalId: r.goal_id as string } : {}),
 });
 
 export const transferToRow = (x: Transfer) => ({
   id: x.id, date: x.date, from_account: x.from, to_account: x.to, amount_minor: toMinor(x.amount), note: x.note ?? null, currency: x.currency ?? 'USD',
+  // only sent for goal contributions, so plain transfers keep working before migration 005
+  ...(x.goalId ? { goal_id: x.goalId } : {}),
 });
 
 export const mapRecurring = (r: Row): RecurringPayment => ({
@@ -71,7 +75,11 @@ export const mapRecurring = (r: Row): RecurringPayment => ({
   ...(r.month !== null && r.month !== undefined ? { month: Number(r.month) } : {}),
   active: Boolean(r.active),
   currency: cur(r),
+  ...(r.created_at ? { createdAt: localDate(String(r.created_at)) } : {}),
 });
+
+/** timestamptz → the user's local calendar date */
+const localDate = (ts: string) => { const d = new Date(ts); return Number.isNaN(d.getTime()) ? ts.slice(0, 10) : toIso(d); };
 
 export const recurringToRow = (r: RecurringPayment) => ({
   id: r.id, name: r.name, category: r.category, amount_minor: toMinor(r.amount), account_id: r.accountId,
@@ -136,6 +144,13 @@ export async function loadUserData(db: NeonClient): Promise<UserData & { allocCu
   };
 }
 
+/** The account's savings % (null = never chosen). Throws if migration 004 hasn't been run. */
+export async function loadUserSettings(db: NeonClient): Promise<{ savingsRate: number | null }> {
+  const r = await rows(db.from('user_settings').select('savings_rate'));
+  const v = r[0] ? Number(r[0].savings_rate) : NaN;
+  return { savingsRate: Number.isFinite(v) ? v : null };
+}
+
 // ─── Mutations ────────────────────────────────────────────────────────────────
 
 const check = async (q: PromiseLike<{ error: { message: string } | null }>) => {
@@ -144,6 +159,8 @@ const check = async (q: PromiseLike<{ error: { message: string } | null }>) => {
 };
 
 export const repo = {
+  saveSavingsRate: (db: NeonClient, rate: number) =>
+    check(db.from('user_settings').upsert({ savings_rate: Math.round(rate * 1000) / 1000, updated_at: new Date().toISOString() }, { onConflict: 'user_id' })),
   insertTransaction: (db: NeonClient, t: Transaction) => check(db.from('transactions').insert(transactionToRow(t))),
   deleteTransaction: (db: NeonClient, id: string) => check(db.from('transactions').delete().eq('id', id)),
   insertTransfer: (db: NeonClient, x: Transfer) => check(db.from('transfers').insert(transferToRow(x))),

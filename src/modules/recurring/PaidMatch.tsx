@@ -3,7 +3,8 @@ import { t, descLabel } from '../../shared/i18n';
 import { fmtDate } from '../../shared/format';
 import { useMoney } from '../../store/Settings';
 import { useFinance } from '../../store/FinanceStore';
-import { likelyPayment, paymentCandidates } from './logic';
+import { isIncomeRule, likelyPayment, paymentCandidates } from './logic';
+import { isoDay } from '../../shared/config';
 
 /**
  * Under a due payment: either a one-click suggestion ("looks like it's already paid: Rent, 1 Sep")
@@ -11,7 +12,15 @@ import { likelyPayment, paymentCandidates } from './logic';
  * Linking marks the bill paid without creating a second expense.
  */
 export function PaidMatch({ r, txs, picking, onClose }: { r: RecurringPayment; txs: Transaction[]; picking: boolean; onClose: () => void }) {
-  const { linkPayment } = useFinance();
+  const { linkPayment, addTransactionKeepBalance, period } = useFinance();
+  // paid (or received) outside the app and already reflected in the balance: record it without moving money again
+  const markInBalance = () => {
+    const ok = addTransactionKeepBalance({
+      date: isoDay(period, Math.min(r.day, period.current)), description: r.name, category: r.category,
+      amount: isIncomeRule(r) ? r.amount : -r.amount, accountId: r.accountId, recurringId: r.id,
+    });
+    if (ok) onClose();
+  };
   const { money } = useMoney();
   const likely = likelyPayment(r, txs);
   const link = (id: string) => { if (linkPayment(r.id, id)) onClose(); };
@@ -43,6 +52,10 @@ export function PaidMatch({ r, txs, picking, onClose }: { r: RecurringPayment; t
             <button className="confirm-btn" onClick={() => link(tx.id)} style={{ flexShrink: 0 }}>{t('thisOne')}</button>
           </div>
         ))}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '6px 0 0', borderTop: '1px solid var(--color-border-light)', marginTop: list.length ? 2 : 6 }}>
+          <span style={{ color: 'var(--color-ink-2)' }}>{isIncomeRule(r) ? t('receivedNotRecorded') : t('paidNotRecorded')}</span>
+          <button className="confirm-btn" onClick={markInBalance} style={{ flexShrink: 0 }}>{t('markInBalance')}</button>
+        </div>
       </div>
     );
   }

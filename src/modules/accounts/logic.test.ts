@@ -32,3 +32,16 @@ describe('reconciliation reminder', () => {
     expect(needsReconcile(null, '2026-09-27', true)).toBe(false);
   });
 });
+
+describe('recording money that is already in the balance', () => {
+  it('shifting the opening by the new transaction keeps the balance the user typed', async () => {
+    const { accountBalances, openingFor } = await import('./logic');
+    const accs = [{ id: 'main' as const, openingBalance: 0 }, { id: 'cash' as const, openingBalance: 0 }, { id: 'savings' as const, openingBalance: 0 }];
+    const salary = { id: 's', date: '2026-09-05', description: 'Salary', category: 'Income', amount: 1_500_000, accountId: 'main' as const };
+    // typed 2 500 000 (salary already inside) → record the salary without changing that number
+    const opening = openingFor('main', 2_500_000, [salary], []);
+    const after = accountBalances(accs.map(a => (a.id === 'main' ? { ...a, openingBalance: opening } : a)), [salary], []);
+    expect(opening).toBe(1_000_000);
+    expect(after.main).toBe(2_500_000);
+  });
+});

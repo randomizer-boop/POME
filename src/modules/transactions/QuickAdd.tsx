@@ -18,13 +18,10 @@ import { accName } from '../accounts/labels';
 import { validateTransactionDraft } from './logic';
 
 type Kind = 'expense' | 'income';
+const isCurrent = (p: { year: number; index: number }, t: { year: number; index: number }) => p.year === t.year && p.index === t.index;
 
 const isTyping = (el: EventTarget | null) =>
   el instanceof HTMLElement && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
-
-const OPEN_EVENT = 'pome:quick-add';
-/** Open the "new transaction" dialog from anywhere (e.g. the first-steps guide) */
-export const openQuickAdd = (kind: Kind = 'expense') => window.dispatchEvent(new CustomEvent<Kind>(OPEN_EVENT, { detail: kind }));
 
 export function QuickAdd() {
   const [open, setOpen] = useState(false);
@@ -40,14 +37,8 @@ export function QuickAdd() {
         if (!guard()) { setStartKind('expense'); setOpen(true); }
       }
     };
-    const onOpen = (e: Event) => {
-      if (guard()) return;
-      setStartKind((e as CustomEvent<Kind>).detail ?? 'expense');
-      setOpen(true);
-    };
     window.addEventListener('keydown', onKey);
-    window.addEventListener(OPEN_EVENT, onOpen);
-    return () => { window.removeEventListener('keydown', onKey); window.removeEventListener(OPEN_EVENT, onOpen); };
+    return () => window.removeEventListener('keydown', onKey);
   }, [guard]);
 
   // toast auto-hides
@@ -97,7 +88,7 @@ export function QuickAdd() {
 }
 
 function QuickAddDialog({ initialKind, onClose, onSaved }: { initialKind: Kind; onClose: () => void; onSaved: (id: string, text: string) => void }) {
-  const { period, today, addTransaction } = useFinance();
+  const { period, today, viewDay, addTransaction } = useFinance();
   const { balances } = useMonthSummary();
   const { money, currency, rate } = useMoney();
 
@@ -105,7 +96,7 @@ function QuickAddDialog({ initialKind, onClose, onSaved }: { initialKind: Kind; 
   const [amountStr, setAmountStr] = useState('');
   const [category, setCategory] = useState(EXPENSE_CATEGORIES.includes('Groceries') ? 'Groceries' : EXPENSE_CATEGORIES[0]);
   const [accountId, setAccountId] = useState<AccountType>('main');
-  const [date, setDate] = useState(isoDay(period, period.current));
+  const [date, setDate] = useState(isoDay(period, isCurrent(period, today) ? Math.min(viewDay, today.current) : viewDay));
   const [description, setDescription] = useState('');
   const [error, setError] = useState<string | null>(null);
   const amountRef = useRef<HTMLInputElement>(null);

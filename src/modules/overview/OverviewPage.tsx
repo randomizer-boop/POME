@@ -27,14 +27,22 @@ const STAT_TINT = ['#5E7A67', '#9B2F31', '#6B6259', '#9A8FB8'];
 export function OverviewPage({ viewKey, onNav }: { viewKey: number; onNav?: (v: View) => void }) {
   const loaded = useProgressLoad();
   const { money } = useMoney();
-  const { income, expenses, budgetSum, savingsRate, expenseShare } = useMonthSummary();
-  const { isCurrentMonth } = useFinance();
+  const { income, expenses, budgetSum, expenseShare, safe } = useMonthSummary();
+  const { isCurrentMonth, dayPicked } = useFinance();
 
   const stats = [
     { label: t('income'),      value: money(income, { compact: true }),         sub: t('receivedThisMonth'),                                   meter: null },
     { label: t('expenses'),    value: money(expenses, { compact: true }),       sub: t('pctOfIncome', { p: Math.round(expenseShare) }), meter: expenseShare },
-    { label: t('budgetLeft'),  value: money(budgetSum.left, { compact: true }), sub: t('ofX', { x: money(budgetSum.planned, { maxFrac: 0 }) }), meter: Math.max(0, 100 - budgetSum.usedPct) },
-    { label: t('savingsRate'), value: `${savingsRate}%`,                        sub: t('ofIncomeSaved'),                                       meter: null },
+    budgetSum.planned > 0
+      ? { label: t('budgetLeft'), value: money(budgetSum.left, { compact: true }), sub: t('ofX', { x: money(budgetSum.planned, { maxFrac: 0 }) }), meter: Math.max(0, 100 - budgetSum.usedPct) }
+      : { label: t('budgetLeft'), value: '—', sub: t('budgetNotSetSub'), meter: null },
+    // the setting (target %) and the fact: how much of that target has actually been moved to Savings
+    safe.savingsRate > 0
+      ? { label: t('savingsRate'), value: `${Math.round(safe.savingsRate * 100)}%`,
+          sub: t('savingsSavedOf', { x: money(safe.savingsMoved, { maxFrac: 0 }), y: money(safe.savingsTarget, { maxFrac: 0 }) })
+            + (safe.savingsProgressPct > 100 ? ` · ${t('savingsPlanPct', { p: safe.savingsProgressPct })}` : ''),
+          meter: Math.min(100, safe.savingsProgressPct) }
+      : { label: t('savingsRate'), value: '0%', sub: t('savingsOff2'), meter: null },
   ];
 
   return (
@@ -43,7 +51,7 @@ export function OverviewPage({ viewKey, onNav }: { viewKey: number; onNav?: (v: 
       {isCurrentMonth && <OnboardingGuide onNav={onNav} />}
       {isCurrentMonth && <ReconcileReminder onNav={onNav} />}
       <div className="m-stack" style={{ display: 'grid', gridTemplateColumns: '1.1fr 1fr', gap: 16, marginBottom: 16, alignItems: 'start' }}>
-        {isCurrentMonth ? <SafeToSpendCard viewKey={viewKey} /> : <MonthResultCard />}
+        {isCurrentMonth || dayPicked ? <SafeToSpendCard viewKey={viewKey} /> : <MonthResultCard />}
         <SpendingCalendar />
       </div>
 

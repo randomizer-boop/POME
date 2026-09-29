@@ -2,17 +2,31 @@ import { useState, type CSSProperties, type ReactNode } from 'react';
 import type { RecurringPayment } from '../../shared/types';
 import { t, catLabel, descLabel, locale, paymentsWord } from '../../shared/i18n';
 import { monthName } from '../../shared/format';
+import { isoDay } from '../../shared/config';
 import { CategoryBadge } from '../../shared/ui/categoryIcons';
-import { Card, Page, PageHeader } from '../../shared/ui/primitives';
+import { Card, Collapse, Page, PageHeader } from '../../shared/ui/primitives';
 import { useMoney } from '../../store/Settings';
 import { DeleteButton } from '../../shared/ui/DeleteButton';
 import { useFinance } from '../../store/FinanceStore';
 import { useMonthSummary } from '../../store/useMonthSummary';
 import { accName } from '../accounts/labels';
-import { daysToCharge, daysUntil, isBillRule, isDueInPeriod, nextChargeDate, recurringStatus, type RecurringStatus } from './logic';
+import { daysToCharge, daysUntil, isBillRule, isDueInPeriod, isIncomeRule, nextChargeDate, recurringStatus, type RecurringStatus } from './logic';
 import { dueLabel } from './dueLabel';
 import { RecurringForm } from './RecurringForm';
 import { PaidMatch } from './PaidMatch';
+
+/** A button that says what it will do to the money: label + a small line under it */
+function ResultButton({ label, result, onClick, primary }: { label: string; result: string; onClick: () => void; primary?: boolean }) {
+  return (
+    <button onClick={onClick} style={{
+      display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 1, padding: '6px 12px', borderRadius: 12, cursor: 'pointer',
+      border: `1px ${primary ? 'solid' : 'dashed'} var(--line-strong)`, background: primary ? 'var(--color-card)' : 'transparent', textAlign: 'left',
+    }}>
+      <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--color-ink)' }}>{label}</span>
+      <span style={{ fontSize: 10.5, color: 'var(--color-ink-3)', whiteSpace: 'nowrap' }}>{result}</span>
+    </button>
+  );
+}
 
 const PauseIcon = () => <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><rect x="2.5" y="2" width="2.5" height="8" rx="1" fill="currentColor"/><rect x="7" y="2" width="2.5" height="8" rx="1" fill="currentColor"/></svg>;
 const PlayIcon = () => <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 2l7 4-7 4z" fill="currentColor"/></svg>;
@@ -86,19 +100,23 @@ function Stat({ label, value, sub }: { label: string; value: ReactNode; sub?: Re
 const SOON_DAYS = 7;
 
 export function RecurringPage() {
-  const { period, transactions, recurring, toggleRecurring, payRecurring, removeRecurring, guard } = useFinance();
+  const { period, transactions, allTransactions, recurring, toggleRecurring, payRecurring, removeRecurring, addTransactionKeepBalance, guard } = useFinance();
   const { billsUpcoming, unpaid, bills } = useMonthSummary();
   const { money } = useMoney();
   const [formOpen, setFormOpen] = useState(false);
+  const [incomeFormOpen, setIncomeFormOpen] = useState(false);
   const [picking, setPicking] = useState<string | null>(null);
   const m0 = (v: number) => money(v, { maxFrac: 0 });
 
   const perMonth = bills.perMonth;
-  const rows: Row[] = recurring.map(r => {
-    const next = nextChargeDate(r, transactions, period);
-    const status = recurringStatus(r, transactions, period);
+  const allRows: Row[] = recurring.map(r => {
+    const next = nextChargeDate(r, allTransactions, period);
+    const status = recurringStatus(r, allTransactions, period);
     return { r, next, status, days: status === 'overdue' ? daysToCharge(r, period) : daysUntil(next, period) };
   });
+  // income (salary) lives in its own card; everything below is about bills
+  const incomeRows = allRows.filter(x => isIncomeRule(x.r)).sort((a, b) => a.r.day - b.r.day);
+  const rows = allRows.filter(x => isBillRule(x.r));
   const byDays = (a: Row, b: Row) => a.days - b.days;
   const dueNow = (x: Row) => x.r.active && isDueInPeriod(x.r, period);
   const thisMonth = rows.filter(dueNow);
@@ -119,15 +137,101 @@ export function RecurringPage() {
 
   const statusText = (x: Row): ReactNode => {
     if (x.status === 'paused') return t('pausedSection');
-    if (x.status === 'paid') return <span>✓ {t('nextOn', { d: fmtNext(x.next) })}</span>;
+    if (x.status === 'paid') return <span>✓ {isIncomeRule(x.r) ? t('receivedThisMonthShort') : ''} {t('nextOn', { d: fmtNext(x.next) })}</span>;
+    // income that's late isn't a debt: say when it was expected
+    if (isIncomeRule(x.r) && x.status === 'overdue') return <span style={{ color: 'var(--color-brand)' }}>{t('incomeExpectedOn', { d: fmtNext(dueDate(x)) })}</span>;
     return <span style={{ color: x.status === 'overdue' ? 'var(--color-negative)' : x.days <= SOON_DAYS ? 'var(--color-brand)' : undefined }}>{dueLabel(x.days)}</span>;
   };
+  /** the date the action buttons refer to: this month's (overdue) or the next one */
+  const dueDate = (x: Row) => (x.status === 'overdue' ? new Date(period.year, period.index, Math.min(x.r.day, period.total)) : x.next);
+
+  // income already reflected in the account: record it (history, stats, marks it received) without adding it again
+  const markInBalance = (r: RecurringPayment) => addTransactionKeepBalance({
+    date: isoDay(period, Math.min(r.day, period.current)), description: r.name, category: r.category,
+    amount: r.amount, accountId: r.accountId, recurringId: r.id,
+  });
 
   const openForm = () => { if (!guard()) setFormOpen(o => !o); };
+  const openIncomeForm = () => { if (!guard()) setIncomeFormOpen(o => !o); };
+
+  const renderRow = (x: Row) => {
+    const canPay = x.status === 'overdue' || x.status === 'upcoming' ? dueNow(x) : false;
+    return (
+      <div key={x.r.id}>
+      <div className="row-hover reveal-on-hover row-recur" style={{
+        display: 'grid', gridTemplateColumns: '46px 1fr auto auto 30px 26px', gap: 14, alignItems: 'center',
+        padding: '10px 8px', margin: '0 -8px', borderBottom: '1px solid var(--color-border-light)', borderRadius: 8,
+        opacity: x.status === 'paused' ? 0.55 : 1,
+      }}>
+        <DateTile date={x.status === 'overdue' ? new Date(period.year, period.index, Math.min(x.r.day, period.total)) : x.next} tone={tone(x)} />
+        <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span className="m-hide"><CategoryBadge category={x.r.category} size={30} /></span>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{descLabel(x.r.name)}</div>
+            <div style={{ fontSize: 11, color: 'var(--color-ink-3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {isIncomeRule(x.r)
+                ? `${t('incomeEvery', { d: x.r.day })} · ${t('toAccount', { a: accName(x.r.accountId) })}`
+                : `${x.r.frequency === 'yearly' ? t('yearly') : t('monthly')} · ${catLabel(x.r.category)} · ${accName(x.r.accountId)}`}
+            </div>
+          </div>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ fontSize: 14, fontWeight: 500, fontFamily: 'var(--font-mono)', color: isIncomeRule(x.r) ? 'var(--color-positive)' : undefined }}>{isIncomeRule(x.r) ? '+' : ''}{money(x.r.amount)}</div>
+          <div style={{ fontSize: 11, marginTop: 2, color: 'var(--color-ink-3)' }}>{statusText(x)}</div>
+        </div>
+        <div style={{ minWidth: 84, display: 'flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+          {canPay && isBillRule(x.r) && (
+            <>
+              <button className="link-btn" onClick={() => payRecurring(x.r.id)}>{t('payNow')}</button>
+              <button className="link-btn" onClick={() => { if (!guard()) setPicking(p => (p === x.r.id ? null : x.r.id)); }}
+                style={{ background: 'transparent', borderStyle: 'dashed' }}>{t('alreadyPaid')}</button>
+            </>
+          )}
+          {/* income: each button says what happens to the balance */}
+          {canPay && isIncomeRule(x.r) && (
+            <>
+              <ResultButton label={t('addIncomeArrival')} result={t('addIncomeArrivalSub', { x: money(x.r.amount), a: accName(x.r.accountId) })}
+                onClick={() => payRecurring(x.r.id)} primary />
+              <ResultButton label={t('alreadyInBalance')} result={t('alreadyInBalanceSub')}
+                onClick={() => markInBalance(x.r)} />
+            </>
+          )}
+        </div>
+        <button
+          className="icon-btn reveal"
+          onClick={() => toggleRecurring(x.r.id)}
+          aria-label={x.status === 'paused' ? t('resume') : t('pause')}
+          title={x.status === 'paused' ? t('resume') : t('pause')}
+        >
+          {x.status === 'paused' ? <PlayIcon /> : <PauseIcon />}
+        </button>
+        <DeleteButton onConfirm={() => removeRecurring(x.r.id)} label={t('deleteTx')} />
+      </div>
+      {canPay && isBillRule(x.r) && <PaidMatch r={x.r} txs={transactions} picking={picking === x.r.id} onClose={() => setPicking(null)} />}
+      </div>
+    );
+  };
 
   return (
     <Page maxWidth={920}>
       <PageHeader eyebrow={`${monthName(period)} ${period.year}`} title={t('recurringPayments')} />
+
+      {/* Income — not a payment: it tells "Safe to spend" until when the money must last */}
+      <Card style={{ marginBottom: 16, padding: '16px 20px 12px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+          <div>
+            <div style={{ fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-ink-3)' }}>{t('incomeSection')}</div>
+          </div>
+          <button className="link-btn" onClick={openIncomeForm} aria-expanded={incomeFormOpen} style={{ flexShrink: 0 }}>
+            {incomeFormOpen ? t('close') : `+ ${t('addIncomeBtn')}`}
+          </button>
+        </div>
+        <Collapse open={incomeFormOpen}><div style={{ padding: '12px 0 4px' }}><RecurringForm embedded kind="income" onDone={() => setIncomeFormOpen(false)} /></div></Collapse>
+        {incomeRows.length === 0 && !incomeFormOpen && (
+          <div style={{ padding: '14px 0 6px', fontSize: 13, color: 'var(--color-ink-2)' }}>{t('noIncomeRule')}</div>
+        )}
+        {incomeRows.length > 0 && <div style={{ marginTop: 10 }}>{incomeRows.map(renderRow)}</div>}
+      </Card>
 
       {/* This month at a glance */}
       <Card style={{ marginBottom: 16 }}>
@@ -154,9 +258,9 @@ export function RecurringPage() {
             {formOpen ? t('close') : `+ ${t('addPaymentBtn')}`}
           </button>
         </div>
-        {formOpen && <div style={{ margin: '12px 0 4px' }} className="view-enter"><RecurringForm embedded /></div>}
+        <Collapse open={formOpen}><div style={{ padding: '12px 0 4px' }}><RecurringForm embedded onDone={() => setFormOpen(false)} /></div></Collapse>
 
-        {recurring.length === 0 && !formOpen && (
+        {rows.length === 0 && !formOpen && (
           <div style={{ padding: '28px 0', textAlign: 'center', fontSize: 13, color: 'var(--color-ink-3)' }}>{t('noRecurring')}</div>
         )}
 
@@ -169,50 +273,7 @@ export function RecurringPage() {
               <span>{section.title}</span>
               <span style={{ fontFamily: 'var(--font-mono)' }}>{section.rows.length}</span>
             </div>
-            {section.rows.map(x => {
-              const canPay = x.status === 'overdue' || x.status === 'upcoming' ? dueNow(x) : false;
-              return (
-                <div key={x.r.id}>
-                <div className="row-hover reveal-on-hover row-recur" style={{
-                  display: 'grid', gridTemplateColumns: '46px 1fr auto auto 30px 26px', gap: 14, alignItems: 'center',
-                  padding: '10px 8px', margin: '0 -8px', borderBottom: '1px solid var(--color-border-light)', borderRadius: 8,
-                  opacity: x.status === 'paused' ? 0.55 : 1,
-                }}>
-                  <DateTile date={x.status === 'overdue' ? new Date(period.year, period.index, Math.min(x.r.day, period.total)) : x.next} tone={tone(x)} />
-                  <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span className="m-hide"><CategoryBadge category={x.r.category} size={30} /></span>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 14, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{descLabel(x.r.name)}</div>
-                      <div style={{ fontSize: 11, color: 'var(--color-ink-3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {x.r.frequency === 'yearly' ? t('yearly') : t('monthly')} · {catLabel(x.r.category)} · {accName(x.r.accountId)}
-                      </div>
-                    </div>
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: 14, fontWeight: 500, fontFamily: 'var(--font-mono)' }}>{money(x.r.amount)}</div>
-                    <div style={{ fontSize: 11, marginTop: 2, color: 'var(--color-ink-3)' }}>{statusText(x)}</div>
-                  </div>
-                  <div style={{ minWidth: 84, display: 'flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                    {canPay && <button className="link-btn" onClick={() => payRecurring(x.r.id)}>{isBillRule(x.r) ? t('payNow') : t('markReceived')}</button>}
-                    {canPay && (
-                      <button className="link-btn" onClick={() => { if (!guard()) setPicking(p => (p === x.r.id ? null : x.r.id)); }}
-                        style={{ background: 'transparent', borderStyle: 'dashed' }}>{t('alreadyPaid')}</button>
-                    )}
-                  </div>
-                  <button
-                    className="icon-btn reveal"
-                    onClick={() => toggleRecurring(x.r.id)}
-                    aria-label={x.status === 'paused' ? t('resume') : t('pause')}
-                    title={x.status === 'paused' ? t('resume') : t('pause')}
-                  >
-                    {x.status === 'paused' ? <PlayIcon /> : <PauseIcon />}
-                  </button>
-                  <DeleteButton onConfirm={() => removeRecurring(x.r.id)} label={t('deleteTx')} />
-                </div>
-                {canPay && <PaidMatch r={x.r} txs={transactions} picking={picking === x.r.id} onClose={() => setPicking(null)} />}
-                </div>
-              );
-            })}
+            {section.rows.map(renderRow)}
           </div>
         ))}
       </Card>

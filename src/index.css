@@ -287,3 +287,7 @@ button {
 @media (orientation: landscape) { .rotate-hint { display: none; } }
 
 @media (max-width: 768px) { .paid-match { margin-left: 0 !important; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .collapse { transition: none !important; }
+}

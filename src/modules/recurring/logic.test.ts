@@ -67,3 +67,25 @@ describe('already paid: matching recurring payments to expenses', () => {
     expect(likelyPayment(rent, txs)).toBeNull();
   });
 });
+
+describe('status on the Recurring page (salary / bill added after its day)', () => {
+  const sep29: Period = { year: 2026, index: 8, current: 29, total: 30 };
+  const zp: RecurringPayment = { id: 'zp', name: 'Зарплата', category: 'Income', amount: 800_000, accountId: 'main', frequency: 'monthly', day: 5, active: true, createdAt: '2026-09-29' };
+  const bill: RecurringPayment = { ...zp, id: 'b', name: 'Платеж', category: 'Housing', amount: 300_000 };
+
+  it('a salary added on the 29th with no income recorded is not "overdue since the 5th"', () => {
+    expect(recurringStatus(zp, [], sep29)).toBe('upcoming');
+    expect(nextChargeDate(zp, [], sep29)).toEqual(new Date(2026, 9, 5));
+  });
+
+  it('the September salary recorded by hand is recognised as received', () => {
+    const got: Transaction = { id: 's', date: '2026-09-05', description: 'ЗП', category: 'Income', amount: 800_000, accountId: 'main' };
+    expect(recurringStatus(zp, [got], sep29)).toBe('paid');
+  });
+
+  it('a bill paid early shows as paid, next charge is the month after', () => {
+    const early: Transaction = { id: 'p', date: '2026-09-29', description: 'Платеж', category: 'Housing', amount: -300_000, accountId: 'main', recurringId: 'b' };
+    expect(recurringStatus(bill, [early], sep29)).toBe('paid');
+    expect(nextChargeDate(bill, [early], sep29)).toEqual(new Date(2026, 10, 5));
+  });
+});

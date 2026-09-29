@@ -2,8 +2,8 @@ import type { Currency, Period } from './types';
 
 export const CURRENCIES: Currency[] = ['KZT', 'MNT', 'USD', 'EUR', 'CNY'];
 
-// Base currency is USD. Rates as of 24 Sep 2026 (open.er-api.com).
-// TODO: replace with a rates API + cache (plan: ExchangeRate table).
+// Base currency is USD. Live rates come from shared/rates.ts (open.er-api.com, cached 12 h);
+// these built-in ones (24 Sep 2026) are only the offline fallback.
 export const EXCHANGE_RATES: Record<Currency, number> = {
   KZT: 444.88,
   MNT: 3591.61,

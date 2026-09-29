@@ -42,8 +42,8 @@ const MAX_CUT = 50;
 
 export function ForecastPage() {
   const { period, transactions, goals } = useFinance();
-  const { income, safe, forecast, hasLastMonth } = useMonthSummary();
-  const { money } = useMoney();
+  const { income, safe, forecast, hasLastMonth, liquidBalance, expectedIncome, billsUpcoming } = useMonthSummary();
+  const { money, minus } = useMoney();
   const m0 = (v: number) => money(v, { maxFrac: 0 });
   const [cuts, setCuts] = useState<Record<string, number>>({});
 
@@ -114,10 +114,11 @@ export function ForecastPage() {
             <SectionHeader title={t('monthEnd')} right={
               <StatusPill tone={endTone}>{endTone === 'ok' ? t('onTrack') : endTone === 'warn' ? t('tight') : t('overBudget')}</StatusPill>
             } />
-            <LedgerRow label={t('balanceNow')} amount={m0(safe.liquidBalance)} />
-            {safe.expectedIncome > 0 && <LedgerRow label={t('expectedIncomeRow')} amount={`+${m0(safe.expectedIncome)}`} />}
-            <LedgerRow label={t('billsToPay')} amount={`−${m0(safe.upcomingBills)}`} />
-            <LedgerRow label={t('projectedVariableRow')} detail={forecast.paceSource === 'lastMonth' ? t('atLastMonthPace') : t('atCurrentPace')} amount={`−${m0(projectedVariable)}`} />
+            {/* the same numbers projectMonthEnd adds up (month-based, not the pay cycle) */}
+            <LedgerRow label={t('balanceNow')} amount={m0(liquidBalance)} />
+            {expectedIncome > 0 && <LedgerRow label={t('expectedIncomeRow')} amount={`+${m0(expectedIncome)}`} />}
+            <LedgerRow label={t('billsToPay')} amount={minus(billsUpcoming, { maxFrac: 0 })} />
+            <LedgerRow label={t('projectedVariableRow')} detail={forecast.paceSource === 'lastMonth' ? t('atLastMonthPace') : t('atCurrentPace')} amount={minus(projectedVariable, { maxFrac: 0 })} />
             <LedgerRow strong label={t('projectedEndRow')} amount={<span style={{ color: projectedEndBalance < 0 ? 'var(--color-negative)' : undefined }}>{m0(projectedEndBalance)}</span>} />
             {safe.goalsLeft > 0 && <LedgerRow label={t('goalsInEndRow')} amount={m0(safe.goalsLeft)} />}
             {hasCuts && (

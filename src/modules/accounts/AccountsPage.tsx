@@ -8,6 +8,7 @@ import { DeleteButton } from '../../shared/ui/DeleteButton';
 import { useFinance } from '../../store/FinanceStore';
 import { useMonthSummary } from '../../store/useMonthSummary';
 import { accountFlow } from './logic';
+import { sub } from '../../shared/money';
 import { ACCOUNT_IDS, accName } from './labels';
 import { TransferForm } from './TransferForm';
 import { markReconciled } from './ReconcileReminder';
@@ -50,7 +51,7 @@ function BalanceEditor({ id, current, onDone }: { id: AccountType; current: numb
 }
 
 export function AccountsPage() {
-  const { period, transactions, transfers, removeTransfer, guard } = useFinance();
+  const { period, transactions, transfers, removeTransfer, guard, isCurrentMonth } = useFinance();
   const [editing, setEditing] = useState<AccountType | null>(null);
   const { balances, totalBalance } = useMonthSummary();
   const { money } = useMoney();
@@ -89,6 +90,8 @@ export function AccountsPage() {
                   </button>
                 </div>
               )}
+              {/* start of month + in − out = balance, so it's clear where the number comes from */}
+              {isCurrentMonth && row(t('monthStartBalance'), money(sub(balances[id], sub(inc, out))))}
               {row(t('monthIn'), `+${money(inc)}`, 'var(--color-positive)')}
               {row(t('monthOut'), `${out > 0 ? '−' : ''}${money(out)}`)}
             </Card>

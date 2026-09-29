@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { AccountType, Goal } from '../../shared/types';
+import { Deer } from '../../shared/ui/Deer';
 import { t, goalLabel } from '../../shared/i18n';
 import { currencySymbol, fmtMonthYear, parseAmount, sanitizeAmountInput } from '../../shared/format';
 import { useProgressLoad } from '../../shared/hooks';
@@ -108,7 +109,8 @@ export function GoalsPage() {
       )}
 
       {goals.length === 0 && !formOpen && (
-        <div style={{ padding: '36px 0', textAlign: 'center', fontSize: 14, color: 'var(--color-ink-3)' }}>
+        <div style={{ padding: '28px 0 36px', textAlign: 'center', fontSize: 14, color: 'var(--color-ink-3)' }}>
+          <Deer pose="front" size={104} style={{ margin: "0 auto 14px" }} />
           <div style={{ marginBottom: 12 }}>{t('emptyGoals')}</div>
           <button className="link-btn" onClick={openForm}>+ {t('newGoalBtn')}</button>
         </div>
