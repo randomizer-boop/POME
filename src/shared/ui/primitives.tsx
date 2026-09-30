@@ -170,8 +170,9 @@ export function Collapse({ open, children }: { open: boolean; children: ReactNod
     if (open) {
       setMounted(true);
       // next frame, so the browser sees the closed state first and animates from it
-      const id = requestAnimationFrame(() => requestAnimationFrame(() => setShown(true)));
-      return () => cancelAnimationFrame(id);
+      let inner = 0;
+      const outer = requestAnimationFrame(() => { inner = requestAnimationFrame(() => setShown(true)); });
+      return () => { cancelAnimationFrame(outer); cancelAnimationFrame(inner); };
     }
     setShown(false);
     const id = window.setTimeout(() => setMounted(false), 320);
@@ -179,7 +180,7 @@ export function Collapse({ open, children }: { open: boolean; children: ReactNod
   }, [open]);
   if (!mounted) return null;
   return (
-    <div className="collapse" style={{
+    <div className="pome-collapse" style={{
       display: 'grid', gridTemplateRows: shown ? '1fr' : '0fr', opacity: shown ? 1 : 0,
       transition: 'grid-template-rows 0.3s cubic-bezier(0.4,0,0.2,1), opacity 0.25s ease',
     }}>
