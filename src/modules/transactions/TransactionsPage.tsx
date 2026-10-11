@@ -69,7 +69,7 @@ export function TransactionsPage() {
             color: filter === f.id ? '#fff' : 'var(--color-ink-2)',
           }}>{f.label}</button>
         ))}
-        <input type="text" placeholder={t('searchPlaceholder')} value={search} onChange={e => setSearch(e.target.value)} style={{
+        <input type="text" maxLength={80} placeholder={t('searchPlaceholder')} value={search} onChange={e => setSearch(e.target.value)} style={{
           marginLeft: 'auto', padding: '7px 14px', border: '1px solid var(--line-strong)', borderRadius: 20,
           background: 'var(--color-card)', fontSize: 13, color: 'var(--color-ink)', width: 230,
         }} />

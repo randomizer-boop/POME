@@ -58,7 +58,7 @@ export function GoalForm({ onDone }: { onDone?: () => void }) {
   return (
     <form onSubmit={submit} noValidate>
       <Field label={t('name')} style={{ marginBottom: 12 }}>
-        <input value={name} onChange={e => { setName(e.target.value); setError(null); }} placeholder={t('goalNamePh')} style={fieldStyle} autoFocus />
+        <input maxLength={80} value={name} onChange={e => { setName(e.target.value); setError(null); }} placeholder={t('goalNamePh')} style={fieldStyle} autoFocus />
       </Field>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
         <Field label={t('targetAmount')}>{amount(target, setTarget)}</Field>

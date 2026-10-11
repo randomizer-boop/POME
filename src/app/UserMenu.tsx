@@ -2,11 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import { t } from '../shared/i18n';
 import { useSession } from '../store/Session';
 import { showGuide } from '../modules/onboarding/OnboardingGuide';
+import { ExportDialog } from '../modules/export/ExportDialog';
 
 /** Header: account avatar + sign out; in demo — a badge and a sign-up button */
 export function UserMenu({ onGoHome }: { onGoHome?: () => void }) {
   const { status, user, signOut, signOutEverywhere, exitDemo } = useSession();
   const [open, setOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const box = useRef<HTMLDivElement>(null);
 
   // close on click outside / Escape
@@ -25,7 +27,9 @@ export function UserMenu({ onGoHome }: { onGoHome?: () => void }) {
         <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-accent)', border: '1px solid var(--color-accent)', borderRadius: 6, padding: '2px 8px' }}>
           {t('demoBadge')}
         </span>
+        <button className="link-btn m-hide" onClick={() => setExporting(true)}>{t('exp.menu')}</button>
         <button className="link-btn m-hide" onClick={exitDemo}>{t('signUp')}</button>
+        {exporting && <ExportDialog onClose={() => setExporting(false)} />}
       </div>
     );
   }
@@ -46,6 +50,9 @@ export function UserMenu({ onGoHome }: { onGoHome?: () => void }) {
           <button className="row-hover" onClick={() => { setOpen(false); showGuide(user.id); onGoHome?.(); }} style={{ width: '100%', textAlign: 'left', padding: '10px 14px', border: 'none', borderBottom: '1px solid var(--line)', background: 'transparent', cursor: 'pointer', fontSize: 13, color: 'var(--color-ink)' }}>
             {t('howToStart')}
           </button>
+          <button className="row-hover" onClick={() => { setOpen(false); setExporting(true); }} style={{ width: '100%', textAlign: 'left', padding: '10px 14px', border: 'none', borderBottom: '1px solid var(--line)', background: 'transparent', cursor: 'pointer', fontSize: 13, color: 'var(--color-ink)' }}>
+            {t('exp.menu')}
+          </button>
           <button className="row-hover" onClick={() => { setOpen(false); void signOut(); }} style={{ width: '100%', textAlign: 'left', padding: '10px 14px', border: 'none', borderBottom: '1px solid var(--line)', background: 'transparent', cursor: 'pointer', fontSize: 13, color: 'var(--color-ink)' }}>
             {t('signOut')}
           </button>
@@ -54,6 +61,7 @@ export function UserMenu({ onGoHome }: { onGoHome?: () => void }) {
           </button>
         </div>
       )}
+      {exporting && <ExportDialog onClose={() => setExporting(false)} />}
     </div>
   );
 }

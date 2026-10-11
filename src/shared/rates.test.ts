@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseRates } from './rates';
+import { parseRates, saneRate } from './rates';
 
 describe('parseRates', () => {
   it('keeps only our currencies', () => {
@@ -10,5 +10,12 @@ describe('parseRates', () => {
   it('rejects incomplete or failed responses', () => {
     expect(parseRates({ result: 'error' })).toBeNull();
     expect(parseRates({ result: 'success', rates: { KZT: 480 } })).toBeNull();
+  });
+});
+
+describe('saneRate', () => {
+  it('rejects values that would corrupt amounts', () => {
+    expect([1, 444.88, 3591.6].every(saneRate)).toBe(true);
+    expect([0, -1, NaN, Infinity, 1e9, '5', null].some(v => saneRate(v))).toBe(false);
   });
 });

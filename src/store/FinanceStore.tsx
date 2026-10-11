@@ -129,6 +129,9 @@ export function dbErrorText(message: string): string {
   if (/currency/i.test(message) && /(does not exist|schema cache|could not find)/i.test(message)) return t('errMigration');
   if (/user_settings/i.test(message)) return t('errMigration004');
   if (/goal_id/i.test(message)) return t('errMigration005');
+  // limits from db/migrations/006_security.sql
+  if (/row limit reached/i.test(message)) return t('errRowLimit');
+  if (/_range"|_len"|check constraint/i.test(message)) return t('errValueRange');
   return t('errSaveFailed', { x: message });
 }
 

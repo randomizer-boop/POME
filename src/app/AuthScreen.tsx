@@ -192,11 +192,11 @@ export function AuthScreen() {
           <form onSubmit={submit} noValidate>
             {mode === 'signUp' && !verifying && (
               <Field label={t('yourName')} style={{ marginBottom: 12 }}>
-                <input value={name} onChange={e => { setName(e.target.value); setError(null); }} autoComplete="name" style={fieldStyle} />
+                <input maxLength={80} value={name} onChange={e => { setName(e.target.value); setError(null); }} autoComplete="name" style={fieldStyle} />
               </Field>
             )}
             <Field label={t('emailLabel')} style={{ marginBottom: 12 }}>
-              <input type="email" value={email} onChange={e => { setEmail(e.target.value); setError(null); if (codeSentTo) { setCodeSentTo(null); setVerifying(false); } }} autoComplete="email" style={fieldStyle} />
+              <input type="email" maxLength={254} value={email} onChange={e => { setEmail(e.target.value); setError(null); if (codeSentTo) { setCodeSentTo(null); setVerifying(false); } }} autoComplete="email" style={fieldStyle} />
             </Field>
 
             {codeSentTo && (
@@ -218,7 +218,7 @@ export function AuthScreen() {
 
             {showPassword && (
               <Field label={mode === 'reset' ? t('newPassword') : t('password')} style={{ marginBottom: mode === 'signIn' ? 6 : 6 }}>
-                <input type="password" value={password} onChange={e => { setPassword(e.target.value); setError(null); }}
+                <input type="password" maxLength={128} value={password} onChange={e => { setPassword(e.target.value); setError(null); }}
                   name={mode === 'signIn' ? 'password' : 'new-password'}
                   autoComplete={mode === 'signIn' ? 'current-password' : 'new-password'} style={fieldStyle} />
               </Field>

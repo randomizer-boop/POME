@@ -68,7 +68,7 @@ export function TransferForm() {
         </Field>
 
         <Field label={t('note')} style={{ marginBottom: 14 }}>
-          <input value={note} onChange={e => setNote(e.target.value)} placeholder={t('notePlaceholder')} style={fieldStyle} />
+          <input maxLength={120} value={note} onChange={e => setNote(e.target.value)} placeholder={t('notePlaceholder')} style={fieldStyle} />
         </Field>
 
         <FormMessage error={error} success={done} />

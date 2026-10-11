@@ -56,7 +56,7 @@ export function RecurringForm({ embedded = false, kind = 'bill', onDone }: { emb
       <SectionHeader title={isIncome ? t('addIncome') : t('addPayment')} />
       <form onSubmit={submit} noValidate>
         <Field label={t('name')} style={{ marginBottom: 12 }}>
-          <input value={name} onChange={e => { setName(e.target.value); clear(); }} placeholder={isIncome ? t('incomeNamePlaceholder') : t('namePlaceholder')} style={fieldStyle} />
+          <input maxLength={80} value={name} onChange={e => { setName(e.target.value); clear(); }} placeholder={isIncome ? t('incomeNamePlaceholder') : t('namePlaceholder')} style={fieldStyle} />
         </Field>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
           <Field label={t('amount')}>

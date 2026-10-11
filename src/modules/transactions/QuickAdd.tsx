@@ -216,7 +216,7 @@ function QuickAddDialog({ initialKind, onClose, onSaved }: { initialKind: Kind; 
               onChange={e => { setDate(e.target.value); setError(null); }} style={fieldStyle} />
           </Field>
           <Field label={t('description')}>
-            <input value={description} onChange={e => setDescription(e.target.value)}
+            <input maxLength={120} value={description} onChange={e => setDescription(e.target.value)}
               placeholder={kind === 'income' ? t('incomePlaceholder') : t('descPlaceholder')} style={fieldStyle} />
           </Field>
         </div>

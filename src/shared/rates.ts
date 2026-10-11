@@ -19,12 +19,15 @@ export const FALLBACK: RatesState = { rates: EXCHANGE_RATES, updatedAt: Date.UTC
 
 interface Cached extends RatesState { fetchedAt: number }
 
+/** A rate we can trust to multiply money by: a finite positive number of sane size (USD → X) */
+export const saneRate = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v > 0 && v < 1_000_000;
+
 export function readCachedRates(): Cached | null {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return null;
     const c = JSON.parse(raw) as Cached;
-    return CURRENCIES.every(k => typeof c.rates?.[k] === 'number') ? c : null;
+    return CURRENCIES.every(k => saneRate(c.rates?.[k])) && Number.isFinite(c.fetchedAt) && Number.isFinite(c.updatedAt) ? { ...c, live: !!c.live } : null;
   } catch { return null; }
 }
 
@@ -37,7 +40,7 @@ export function parseRates(json: unknown): RatesState | null {
   const rates = {} as Record<Currency, number>;
   for (const c of CURRENCIES) {
     const v = c === 'USD' ? 1 : j.rates[c];
-    if (typeof v !== 'number' || !(v > 0)) return null;
+    if (!saneRate(v)) return null;
     rates[c] = v;
   }
   return { rates, updatedAt: (j.time_last_update_unix ?? Date.now() / 1000) * 1000, live: true };

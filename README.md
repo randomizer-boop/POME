@@ -5,6 +5,7 @@ Personal finance that answers one question: **how much can I spend today?**
 - **Safe to spend today** — balance + expected income − upcoming bills − goal money still to set aside − your savings % of income (already moved to Savings counts), spread over the days left; any past day can be looked at
 - Recurring payments with *Pay / Already paid*, accounts & transfers, category budgets, savings goals
 - Analytics, forecast and *What if?*, month history
+- Export a report for any period: Excel (summary, operations, transfers, bills, goals, budget on separate sheets) or CSV — built in the browser
 - 5 currencies with live rates (amounts stored in the currency they were entered in), RU / EN, mobile, read-only demo
 
 **Stack:** React 19 · TypeScript · Vite · Tailwind v4 · Neon (Postgres + Auth + Data API with Row-Level Security) · Vercel · Vitest

@@ -30,13 +30,16 @@ Without `.env` the app still runs — only the demo is available.
 
 ## Migrations to run on an existing database
 - `db/migrations/004_user_settings.sql` — savings % stored per account (then Data API → Refresh schema cache).
+- `db/migrations/006_security.sql` — security hardening: a row can no longer reference another user's recurring payment or goal; no automatic access to tables added later; limits on amounts, dates and text length; a row quota per user. Existing rows are not changed. Then Data API → **Refresh schema cache**.
 
 ## Account security
 - **Sign-in with an email code** (passwordless): Neon Console → Auth → Settings → turn on *Sign-up and sign-in with Email* (Email OTP). Without it the “Sign in with a code” button returns an error; password and Google keep working.
 - **Email verification** on sign-up: Neon Console → Auth → turn on email verification.
 - **Forgot password**: code to email → new password (Email OTP reset); then the person signs in with the new password. Also adds a password to an account created with Google or an email code.
 - **Verify at sign-up (code)**: after sign-up the app asks for the emailed code, then signs in.
-- Built in: idle sign-out after 30 min, “Sign out on all devices”, stronger new-password rules, security headers (`vercel.json`), RLS on every table.
+- Built in: idle sign-out after 30 min, “Sign out on all devices”, stronger new-password rules, RLS on every table, length limits on every text field.
+- Security headers (`vercel.json`): a strict Content-Security-Policy — scripts only from the app itself, network only to Neon (`*.neon.tech`, `*.neon.build`) and the exchange-rate API. If you move Neon Auth / Data API to a custom domain, add it to `connect-src`, otherwise sign-in stops working. Check after deploy: DevTools → Console must show no “Content Security Policy” errors.
+- Data export (account menu → *Export data*): the .xlsx / .csv file is built in the browser, nothing is sent to a server. Text cells can't turn into formulas (CSV-injection protection).
 - True 2FA (TOTP / authenticator app) is on Neon Auth's roadmap (“MFA — coming soon”); add it when Neon ships the plugin.
 
 ## After any schema change

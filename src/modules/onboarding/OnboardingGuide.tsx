@@ -308,7 +308,7 @@ function BillsStep({ index, onBack, onNext, onSkip }: { index: number; onBack: (
         <Saved key={r.id}><span>✓ {descLabel(r.name)} · {t('dueEvery', { d: r.day })}</span><b style={{ fontFamily: 'var(--font-mono)', fontWeight: 500 }}>{money(r.amount, { maxFrac: 0 })}</b></Saved>
       ))}
       <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 10, margin: bills.length ? '12px 0' : '0 0 12px' }}>
-        <Field label={t('name')}><input value={name} onChange={e => { setName(e.target.value); setError(null); }} placeholder={t('billPlaceholder')} style={fieldStyle} autoFocus /></Field>
+        <Field label={t('name')}><input maxLength={80} value={name} onChange={e => { setName(e.target.value); setError(null); }} placeholder={t('billPlaceholder')} style={fieldStyle} autoFocus /></Field>
         <Field label={t('category')}>
           <select value={category} onChange={e => setCategory(e.target.value)} style={fieldStyle}>
             {EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{catLabel(c)}</option>)}
